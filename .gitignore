@@ -1,0 +1,11 @@
+# Local tooling and service secrets
+node_modules/
+.env
+.env.*
+!.env.example
+.supabase/
+supabase/.temp/
+dist/
+build/
+.playwright/
+test-results/

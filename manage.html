@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#fefaef">
+  <title>Kitchen dashboard · The Little Baker Kitchen</title>
+  <link rel="icon" href="assets/img/brands/Hat.png">
+  <link rel="stylesheet" href="assets/ordering/ordering.css">
+  <link rel="stylesheet" href="assets/ordering/manage.css">
+</head>
+<body class="manage-page">
+  <a class="skip-link" href="#workspace">Skip to dashboard</a>
+  <header class="topbar admin-topbar">
+    <a class="brand" href="index.html"><img src="assets/img/brands/Hatblack.png" alt="" width="42" height="42"><span>The Little Baker Kitchen<small>Kitchen dashboard</small></span></a>
+    <nav class="nav-links" aria-label="Quick links"><a href="shop.html">View shop <span aria-hidden="true">↗</span></a><a href="account.html" id="account-link">My account</a></nav>
+  </header>
+  <div class="admin-layout">
+    <aside class="admin-sidebar">
+      <p class="sidebar-caption">YOUR KITCHEN</p>
+      <nav aria-label="Dashboard sections" id="admin-nav">
+        <button class="sidebar-link active" data-view="overview"><span aria-hidden="true">◫</span>Overview</button>
+        <button class="sidebar-link" data-view="orders"><span aria-hidden="true">☷</span>Orders<span id="review-count" class="nav-count" hidden></span></button>
+        <button class="sidebar-link" data-view="products"><span aria-hidden="true">▧</span>Products</button>
+        <button class="sidebar-link" data-view="inventory"><span aria-hidden="true">▦</span>Daily quantities</button>
+        <button class="sidebar-link" data-view="promos"><span aria-hidden="true">◇</span>Promo codes</button>
+        <button class="sidebar-link" data-view="settings"><span aria-hidden="true">⚙</span>Shop settings</button>
+        <button class="sidebar-link" data-view="team"><span aria-hidden="true">♧</span>Team access</button>
+      </nav>
+      <div class="sidebar-footer"><span class="status-dot"></span><span id="shop-status">Checking connection</span><small>PHP · Asia/Manila</small></div>
+    </aside>
+    <main id="workspace" class="admin-workspace" tabindex="-1" aria-live="polite"><div class="empty-state"><p>Opening your kitchen dashboard…</p></div></main>
+  </div>
+  <dialog id="admin-dialog" aria-labelledby="dialog-title"><div class="dialog-shell"><div class="dialog-top"><h2 id="dialog-title"></h2><button type="button" class="icon-button" id="dialog-close" aria-label="Close dialog">×</button></div><div id="dialog-body"></div></div></dialog>
+  <noscript><p class="notice">JavaScript is needed to manage your shop. Please enable it and reload.</p></noscript>
+  <script type="module" src="assets/ordering/manage.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {dateInManila,earliestLeadDate,availability,selectionPrice} from '../assets/ordering/shop-rules.js';
+const settings={production_weekdays:[0,1,2,3,4,5,6],nonproduction_dates:[],fulfillment_weekdays:[0,1,2,3,4,5,6],blocked_dates:[]};
+const monday=new Date('2026-09-14T02:00:00Z');
+const product={id:'cookie',price_cents:60000,min_quantity:1,lead_days:1,active:true,option_groups:[{id:'mix',label:'Six cookies',required_count:6,choices:[{id:'classic',label:'Classic',surcharge_cents:0},{id:'matcha',label:'Matcha',surcharge_cents:3000}]}]};
+test('Monday placement and a full Tuesday production day means Wednesday',()=>assert.equal(earliestLeadDate(product,settings,monday),'2026-09-16'));
+test('nonproduction date is skipped; fulfillment closure alone does not remove production day',()=>{assert.equal(earliestLeadDate(product,{...settings,nonproduction_dates:['2026-09-15']},monday),'2026-09-17');assert.equal(earliestLeadDate(product,{...settings,blocked_dates:['2026-09-15']},monday),'2026-09-16')});
+test('configured cutoff includes boundary, counting one additional full production day',()=>{assert.equal(earliestLeadDate(product,{...settings,cutoff_time:'10:00'},monday),'2026-09-17');assert.equal(earliestLeadDate(product,{...settings,cutoff_time:'10:01'},monday),'2026-09-16')});
+test('Manila calendar rollover does not use the server local timezone',()=>assert.equal(dateInManila('2026-09-14T16:00:00Z'),'2026-09-15'));
+test('four classic and two Matcha add PHP60 to one box, selection count is exact',()=>{assert.equal(selectionPrice(product,{mix:{classic:4,matcha:2}}),66000);assert.throws(()=>selectionPrice(product,{mix:{classic:4,matcha:1}}),/exactly 6/);assert.throws(()=>selectionPrice(product,{mix:{classic:3.5,matcha:2.5}}),/whole/)});
+test('missing date capacity is unavailable and soldout day does not affect another day',()=>{const inventory=[{product_id:'cookie',date:'2026-09-16',capacity:10,reserved:10,available:true},{product_id:'cookie',date:'2026-09-17',capacity:10,reserved:3,available:true}];assert.equal(availability(product,'2026-09-16',settings,inventory,monday).available,false);assert.equal(availability(product,'2026-09-17',settings,inventory,monday).remaining,7);assert.equal(availability(product,'2026-09-18',settings,inventory,monday).available,false)});

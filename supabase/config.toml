@@ -1,0 +1,35 @@
+project_id = "tlb-kitchen-ordering"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 15
+
+[auth]
+enabled = true
+site_url = "http://localhost:8000"
+additional_redirect_urls = ["http://localhost:8000/auth-callback.html", "http://localhost:8000/reset-password.html"]
+enable_signup = true
+minimum_password_length = 10
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+double_confirm_changes = true
+max_frequency = "60s"
+otp_expiry = 3600
+
+# Gateway JWT checks cannot authorize guest order tokens or modern public keys.
+# Each function implements its own order/staff/worker authorization explicitly.
+[functions.proof-upload]
+verify_jwt = false
+
+[functions.proof-url]
+verify_jwt = false
+
+[functions.email-worker]
+verify_jwt = false

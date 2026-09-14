@@ -1,0 +1,14 @@
+{
+  "name": "tlb-kitchen-website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Existing TLB Kitchen website with additive manual-payment ordering draft",
+  "scripts": {
+    "dev": "python -m http.server 4173 --bind 127.0.0.1",
+    "test": "node --test tests/shop-rules.test.mjs && node tests/backend/run.mjs && node tests/edge/run.mjs",
+    "test:shop": "node --test tests/shop-rules.test.mjs",
+    "test:backend": "node tests/backend/run.mjs",
+    "build": "node scripts/build-static.mjs"
+  }
+}
