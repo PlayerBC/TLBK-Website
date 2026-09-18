@@ -74,7 +74,9 @@ begin
    if e.event_type='fulfillment_reminder' then$new$)
   ) as replacements(old_text,new_text)
   loop
-    old_value:=patch.old_text; new_value:=patch.new_text;
+    -- Normalize the migration file too: a Windows checkout may already use CRLF.
+    old_value:=replace(patch.old_text,E'\r\n',E'\n');
+    new_value:=replace(patch.new_text,E'\r\n',E'\n');
     if position(E'\r\n' in definition)>0 then
       old_value:=replace(old_value,chr(10),chr(13)||chr(10));
       new_value:=replace(new_value,chr(10),chr(13)||chr(10));

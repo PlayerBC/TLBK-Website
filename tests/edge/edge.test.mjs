@@ -2,6 +2,7 @@
 // Provider calls are mocked; these tests do not send email or activate services.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 
 const environment = {
   SUPABASE_URL: 'https://project.supabase.co',
@@ -304,6 +305,37 @@ test('staff notifications are individually addressed and use their own stable pr
   const response=await worker(new Request('https://worker.test',{method:'POST',headers:{'x-worker-token':environment.EMAIL_WORKER_TOKEN}}));
   assert.equal((await response.json()).accepted,1);
   assert.deepEqual(events,['maintenance','claim_emails','prepare_email','provider','email_sent']);
+});
+
+test('staff review email lists all saved products and payment components in HTML and plain text',()=>{
+  const review=payload('order_review_required');
+  Object.assign(review.order,{buyer_name:'Test customer',method:'delivery',items:[
+    {name:'Nori <pouch>',quantity:2,selection_labels:[{group:'Flavor',label:'Cheese & spice',quantity:1,surcharge_cents:2000}],unit_price_cents:15000,line_total_cents:30000},
+    {name:'Ube cake',quantity:1,selection_labels:['8 inch'],unit_price_cents:225000,line_total_cents:225000},
+  ],subtotal_cents:255000,discount_cents:25500,delivery_cents:7500,total_cents:237000,promo_code:'DEMO10'});
+  delete review.order.access_token;
+  const rendered=renderEmail(review);
+  for(const content of [rendered.html,rendered.text]){
+    for(const expected of ['Products ordered','Payment breakdown','2 × Nori','1 × Ube cake','8 inch','₱150.00','₱300.00','₱2,250.00','₱2,550.00','−₱255.00','₱75.00','₱2,370.00','Discount (DEMO10)'])assert.ok(content.includes(expected),expected);
+    assert.doesNotMatch(content,/Paid|Balance due|undefined|null/);
+  }
+  assert.match(rendered.html,/Nori &lt;pouch&gt;/);
+  assert.match(rendered.html,/Cheese &amp; spice/);
+  assert.match(rendered.text,/Cheese & spice/);
+});
+
+test('staff pickup breakdown shows zero fees and discount without a promo or false paid amount',()=>{
+  const review=payload('order_review_required');
+  Object.assign(review.order,{discount_cents:0,delivery_cents:0,total_cents:66000});
+  const rendered=renderEmail(review);
+  assert.match(rendered.text,/Subtotal: ₱660\.00\nDiscount: ₱0\.00\nDelivery fee: ₱0\.00\nOrder total: ₱660\.00/);
+  assert.doesNotMatch(rendered.text,/Discount \(|Amount paid|Balance due/);
+});
+
+test('legacy queued review messages retain the exact deployed body for provider idempotency retries',()=>{
+  const legacy={event_type:'order_review_required',order:{id:'legacy-id',reference:'TLB-LEGACY',buyer_name:'Test customer',fulfillment_date:'2026-09-19',method:'pickup',total_cents:13000},settings:{site_url:'https://preview.test',shop_name:'TLB Kitchen'}};
+  // Captured from deployed email-worker v10 before the details migration.
+  assert.equal(createHash('sha256').update(JSON.stringify(renderEmail(legacy))).digest('hex'),'2e2de63180a8577ffc504891433aa57866340a709531d471000430cb3abf3de4');
 });
 
 test('worker uses stable idempotency key and only records provider acceptance after API success', async () => {

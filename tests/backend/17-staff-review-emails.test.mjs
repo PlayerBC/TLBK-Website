@@ -116,11 +116,16 @@ export default async function ({db,check,state}) {
       const migration=await readFile(new URL('../../supabase/migrations/20260918195030_staff_order_review_emails.sql',import.meta.url),'utf8');
       const definition=await scalar("select pg_get_functiondef('public.shop_service(text,jsonb)'::regprocedure)");
       const count=await scalar('select count(*) from tlb.outbox');
-      await db.exec(migration);
+      const installedQueue=await scalar("select pg_get_functiondef('tlb.queue_order_review_emails(uuid)'::regprocedure)");
+      await db.exec(migration.replace(/\r\n/g,'\n'));
+      await db.exec(migration.replace(/\r?\n/g,'\r\n'));
       assert.equal(await scalar("select pg_get_functiondef('public.shop_service(text,jsonb)'::regprocedure)"),definition);
       assert.equal(await scalar('select count(*) from tlb.outbox'),count);
       for(const role of ['anon','authenticated'])assert.equal(await scalar("select has_function_privilege($1,'public.shop_service(text,jsonb)','execute')",[role]),false);
       assert.equal(await scalar("select has_function_privilege('service_role','public.shop_service(text,jsonb)','execute')"),true);
+      // Later migrations may extend the queue payload; keep subsequent suites
+      // on the complete installed schema after checking this older migration.
+      await db.exec(installedQueue);
     })();
   }finally{await api('save_settings',{settings:oldSettings},ids.owner)}
 }
