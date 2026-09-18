@@ -33,12 +33,15 @@ export function customerDateIssue(date,settings={},method='pickup',now=new Date(
 export function earliestLeadDate(product,settings,now = new Date()){
   const today=dateInManila(now),week=settings.production_weekdays??[0,1,2,3,4,5,6];
   if(allowsSameDay(product))return sameDayOpen(settings,now)?today:addDays(today,1);
-  const time=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(now);
-  let count=Math.max(0,Number(product.lead_days)||0)+(settings.cutoff_time&&time>=settings.cutoff_time.slice(0,5)?1:0);
-  for(let n=1;n<=730;n++){
+  let count=Math.max(0,Number(product.lead_days)||0);
+  if(count===0)return addDays(today,1);
+  // A configured cutoff lets an eligible order day count before that time.
+  // With no cutoff, retain the next-day production start. Fulfillment is later.
+  const start=settings.cutoff_time&&sameDayOpen(settings,now)?0:1;
+  for(let n=start;n<start+3660;n++){
     const date=addDays(today,n);
-    if(count===0)return date;
     if(week.includes(dayOfWeek(date))&&!(settings.nonproduction_dates??[]).includes(date))count--;
+    if(count===0)return addDays(date,1);
   }
   return null;
 }

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {leadTimeCases} from '../lead-time-cases.mjs';
+import {earliestLeadDate} from '../../assets/ordering/shop-rules.js';
 
 export default async function ({ db, check }) {
   const settings = {
@@ -28,10 +30,15 @@ export default async function ({ db, check }) {
       nonproduction_dates: ['2026-09-21'],
     }), '2026-09-23');
   })();
-  await check('cutoff is inclusive and disabled cutoff adds no day', async () => {
-    assert.equal(await earliest('2026-09-14T13:59:59+08:00', 1, { cutoff_time: '14:00' }), '2026-09-16');
-    assert.equal(await earliest('2026-09-14T14:00:00+08:00', 1, { cutoff_time: '14:00' }), '2026-09-17');
+  await check('cutoff counts today only before the boundary and disabled cutoff starts tomorrow', async () => {
+    assert.equal(await earliest('2026-09-14T13:59:59+08:00', 1, { cutoff_time: '14:00' }), '2026-09-15');
+    assert.equal(await earliest('2026-09-14T14:00:00+08:00', 1, { cutoff_time: '14:00' }), '2026-09-16');
     assert.equal(await earliest('2026-09-14T22:00:00+08:00', 1), '2026-09-16');
+  })();
+  for (const scenario of leadTimeCases) await check(`browser/server lead-time parity: ${scenario.name}`, async () => {
+    const config = { ...settings, cutoff_time: '12:00', ...scenario.settings };
+    assert.equal(await earliest(scenario.at, scenario.days, config), scenario.expected);
+    assert.equal(earliestLeadDate({ lead_days: scenario.days }, config, new Date(scenario.at)), scenario.expected);
   })();
   await check('lead time uses the Manila date rather than the UTC date', async () => {
     assert.equal(await earliest('2026-09-14T16:30:00Z', 1), '2026-09-17');

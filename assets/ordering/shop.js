@@ -1,9 +1,9 @@
 import {fulfillmentStatus} from './refund-status.js?v=refund-status-1';
-import {mountCustomerCalendar} from './customer-calendar.js?v=same-day-1';
+import {mountCustomerCalendar} from './customer-calendar.js?v=production-cutoff-1';
 import {syncCheckoutFields,socialContactMessage} from './checkout-fields.js?v=social-contact-1';
 import {visibleProductLabel} from './product-label.js';
 import {api,auth,ready,configured,money,escapeHtml as esc,formatDate,toast,upload} from './client.js';
-import {dateInManila,addDays,availability,selectionPrice,selectionLabels,earliestLeadDate,deliveryRestriction,deliveryZone,customerBookingWindow,customerDateIssue,allowsSameDay,sameDayBasketEligible} from './shop-rules.js?v=same-day-1';
+import {dateInManila,addDays,availability,selectionPrice,selectionLabels,earliestLeadDate,deliveryRestriction,deliveryZone,customerBookingWindow,customerDateIssue,allowsSameDay,sameDayBasketEligible} from './shop-rules.js?v=production-cutoff-1';
 const $=s=>document.querySelector(s), app=$('#app');
 const demo=new URLSearchParams(location.search).get('demo')==='1';
 const storageKey=demo?'tlb-demo-checkout-v1':'tlb-checkout-v1';

@@ -83,19 +83,19 @@ export default async function ({ db, check, state }) {
       await settings({ nonproduction_dates: [] });
     })();
 
-    await check('products without opt-in keep original cutoff and full-production-day rules, including mixed baskets', async () => {
+    await check('products without opt-in require tomorrow or their production lead date, including mixed baskets', async () => {
       await settings({ cutoff_time: '12:00' });
       const same = (await fixture(5, { lead_days: 0, allow_same_day: true })).product;
       const zero = (await fixture(5, { lead_days: 0 })).product;
       const prepared = (await fixture(5, { lead_days: 1 })).product;
       for (const p of [same, zero, prepared]) for (const date of ['2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18']) await inventory(p, date, 5);
       assert.equal((await quoteAt(zero, '2026-09-16', '2026-09-15T11:59:59+08:00')).earliest_date, '2026-09-16');
-      await assert.rejects(quoteAt(zero, '2026-09-16', '2026-09-15T12:00:00+08:00'), /Earliest lead-time date: 2026-09-17/);
-      assert.equal((await quoteAt(prepared, '2026-09-18', '2026-09-15T12:00:00+08:00')).earliest_date, '2026-09-18');
+      assert.equal((await quoteAt(zero, '2026-09-16', '2026-09-15T12:00:00+08:00')).earliest_date, '2026-09-16');
+      assert.equal((await quoteAt(prepared, '2026-09-17', '2026-09-15T12:00:00+08:00')).earliest_date, '2026-09-17');
       for (const other of [zero, prepared]) for (const items of [[item(same), item(other)], [item(other), item(same)]]) {
         await assert.rejects(quoteAt(same, '2026-09-15', '2026-09-15T11:00:00+08:00', { items }), /not available for same-day/);
       }
-      assert.equal((await quoteAt(same, '2026-09-18', '2026-09-15T12:00:00+08:00', { items: [item(same), item(prepared)] })).earliest_date, '2026-09-18');
+      assert.equal((await quoteAt(same, '2026-09-17', '2026-09-15T12:00:00+08:00', { items: [item(same), item(prepared)] })).earliest_date, '2026-09-17');
       await settings({ cutoff_time: null });
     })();
 

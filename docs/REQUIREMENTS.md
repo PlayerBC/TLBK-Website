@@ -41,8 +41,8 @@ The first column below identifies actual requirements. The defaults are disclose
 | --- | --- | --- |
 | Reference | Existing TLB Kitchen branding; Cococart general ordering workflow | No missing-screenshot dependency; no Cococart branding copy |
 | Catalog | Admin creates products; no import | Empty catalog, paused until configured; demo content clearly labelled if offered |
-| Lead time | Full production dates between submission and fulfillment; Monday + 1 production day means Wednesday earliest | Order day and fulfillment day excluded; no same-day fulfillment; zero lead means next supported date |
-| Cutoff | Configurable; must preserve confirmed lead-time example | Disabled until set; at/after cutoff adds one eligible full production day |
+| Lead time | Count eligible production dates before fulfillment; with a configured cutoff, the order day counts before that time | Without a cutoff, production starts tomorrow (Monday + 1 day means Wednesday). Fulfillment day never counts. Same-day requires explicit zero-day product opt-in. |
+| Cutoff | Before the configured Manila cutoff, today counts if production is open; at/after cutoff, counting starts tomorrow | With 12 PM cutoff and all production days open, September 19 + 2 days means September 21 before noon, September 22 at/after noon. No extra production day is added. |
 | Schedule | Production schedule distinct from fulfillment booking closures | Owner enters real weekdays, exclusions, blocked dates, and quantities; sample values are test-only |
 | Capacity | Per product per date; pickup/delivery share; no flavor or order-count stock | Explicit capacity row required; missing row means unavailable; reduction below held+committed is rejected |
 | Delivery | Fixed admin zones, supported-address validation, separate recipient details | Exact structured locality selection plus full address; no automated arbitrary-address geocoding |

@@ -346,7 +346,7 @@ Save, refresh, and check the product is still there. Product photos are public: 
 
 In **Daily quantities**, choose the product and a future fulfillment date. Choose a date at least a week away and ensure it is open in settings. Set From and Through to that same date, quantity **5**, and **Available**, then save.
 
-Quantity is per product **per fulfillment date**. A date without an allocation is unavailable. Pickup and delivery share those five boxes. One full production day must fall between submission and fulfillment: Monday submission with Tuesday open for production means Wednesday at the earliest.
+Quantity is per product **per fulfillment date**. A date without an allocation is unavailable. Pickup and delivery share those five boxes. With the cutoff blank, production starts tomorrow: Monday submission with one Tuesday production day means Wednesday at the earliest. With a configured cutoff, the order day counts before the cutoff if it is open for production; at or after the cutoff, counting starts tomorrow. For example, with a 12 PM cutoff and all production days open, a two-day product ordered September 19 is eligible September 21 before noon or September 22 at/after noon. Fulfillment is always after the last counted production day.
 
 In **Shop settings → Delivery zones → + Add zone**, enter Zone name `DEMO delivery`, put `Demo City / Demo Barangay` on one line in the localities field, set the fee to **PHP 50.00**, and check **Allow delivery**. Save it and configure the delivery window. One box with no promo should total **PHP 100.00** for pickup or **PHP 150.00** for delivery.
 
