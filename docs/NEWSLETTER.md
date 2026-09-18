@@ -36,7 +36,7 @@ The account page checks Resend when its stored state is subscribed, and records 
 
 Use the existing **TLB Kitchen System** Supabase project (`aulhqofjjckwwjmdvqgi`). Do not reset or reinstall the ordering database.
 
-1. Apply the new migration, `supabase/migrations/20260918134354_newsletter_subscriptions.sql`, once after its prerequisites. It creates private newsletter configuration, subscriber, consent-event, and popup records plus the service-only RPC. The `tlb` schema stays unexposed; browser roles receive no table or RPC access.
+1. Apply the newsletter migrations in order, after their prerequisites: `supabase/migrations/20260918134354_newsletter_subscriptions.sql`, then `supabase/migrations/20260918165306_newsletter_durable_imports.sql`. The first creates private newsletter configuration, subscriber, consent-event, and popup records plus the service-only RPC. The second records pending provider imports so retries cannot submit conflicting jobs. The `tlb` schema stays unexposed; browser roles receive no table or RPC access.
 2. Set the resource IDs and production origin in SQL Editor:
 
    ```sql
@@ -105,13 +105,15 @@ Use inboxes you control and a test account. Do not send a campaign to the newsle
 | Resend preferences unsubscribe | Account page reconciles the opt-out on its next visit. A fresh, separately confirmed request is needed to rejoin this topic. |
 | Existing global opt-out | Confirmation does not clear it or reactivate other topics. The customer gets a useful explanation. |
 | Repeated requests | The response does not reveal whether an address is subscribed. Requests are limited to one per minute and three per hour per address, 20 per hour per hashed source address, and 100 per hour overall. |
-| Provider outage or partial failure | Safe error, no secrets exposed, and no false success. A busy update can require waiting up to 90 seconds before retrying; verify eventual provider and account state agree. |
+| Provider outage or partial failure | Safe error, no secrets exposed, and no false success. A busy update can require waiting 90 seconds before retrying. Pending imports survive lease expiry; retry resumes the same job. Verify eventual provider and account state agree. |
+| Unknown import result | A lost upload response blocks further preference jobs until an operator recovers that exact import ID. The system must not submit a second import or clear the marker merely because 90 seconds elapsed. |
+| Completed import with wrong result | Failed row counts or a definite contact/topic mismatch return an error and release the terminal job for a later explicit retry. Transient read failures retain the job for verification. |
 | Authorization | A guest or another account cannot retrieve preferences or change the test account's settings. |
 | Broadcast preparation only | A draft/test preview selects the exact newsletter segment and topic and contains the built-in unsubscribe footer. No live campaign is sent. |
 
 Record the browser/device, action, result, and timestamp. Keep keys, confirmation links, and customer details out of screenshots and public reports. Unsubscribe the controlled test contact after acceptance if it should not receive future newsletters; retain consent/audit records.
 
-If signup reports unavailable, check the migration/config row, function deployment, allowed origin, verified sender, and Full Access key permissions. If a retry says the preference is being updated, wait for the 90-second operation lease before retrying. Do not repeatedly rotate links, clear unsubscribe flags, or bulk opt customers in to diagnose a failure.
+If signup reports unavailable, check the migration/config row, function deployment, allowed origin, verified sender, and Full Access key permissions. If a retry says the preference is being updated, wait for the 90-second operation lease before retrying. This wait does not expire a pending provider import. If the message says the update needs verification, use the operator recovery procedure below. Do not repeatedly rotate links, clear unsubscribe flags, or bulk opt customers in to diagnose a failure.
 
 ## Acceptance finding: topic updates accepted without taking effect
 
@@ -119,9 +121,44 @@ During controlled live acceptance on 19 September 2026 (Manila time), Resend ret
 
 The request body is a bare array: `[{"id":"TOPIC_ID","subscription":"opt_out"}]`. This matches the [current REST cURL example](https://resend.com/docs/api-reference/contacts/update-contact-topics), the [Node SDK implementation](https://github.com/resend/resend-node/blob/main/src/contacts/topics/contact-topics.ts#L32), and [Resend member's OpenAPI correction PR #103](https://github.com/resend/resend-openapi/pull/103). That unmerged PR identifies the object-with-`topics` schema as specification drift. Testing the wrapper `{"topics":[...]}` returned HTTP 422 `validation_error`; it is not a fix. The cause of the accepted but ineffective raw-array request remains unresolved.
 
-The deployed mitigation reads the stored topic state after topic writes and after new-contact creation. The backend completes the local preference change and returns success only after verifying the requested provider state. A no-op or failed verification returns HTTP 503 instead of claiming success. Global unsubscribe suppression remains respected. **Local validation: 47 Edge tests passed**, including mocked provider behavior; this does not establish that the live provider mutation works.
+The earlier deployed mitigation verifies stored topic state after writes and new-contact creation, returning HTTP 503 for a no-op instead of claiming success. The new implementation replaces existing-contact topic PATCH requests with a one-row CSV import through `POST /contacts/imports`. It supplies only the email, a blank `unsubscribed` cell, and the requested newsletter topic, with `on_conflict=upsert`. Resend documents that blank unsubscribe values on re-import preserve existing global opt-outs. An isolated live import changed the controlled fixture's topic to `opt_out` while preserving global `unsubscribed=true` and both name fields. Ordinary `POST /contacts` upserts are unsuitable for this update: a separate controlled probe reset an existing global opt-out when that field was omitted. [Resend import preservation guidance](https://resend.com/migrate/mailchimp), [official multipart import implementation](https://github.com/resend/resend-node/blob/main/src/contacts/imports/contact-imports.ts).
 
-**Campaign launch is blocked until a controlled live test demonstrates a real topic change through the automatic API flow.** Manual cleanup of the controlled test contact in Resend's contact/preferences UI is confirmed: a provider read shows **TLB Newsletter** `opt_out`, global `unsubscribed` remains `false`, and the database is unsubscribed with old confirmation tokens cleared. This manual success does not resolve the automatic API failure. Do not clear a global unsubscribe flag or reset unrelated preferences to work around it. Every eventual newsletter Broadcast must still select **both** the dedicated newsletter segment and **TLB Newsletter** topic; segment membership alone does not establish current consent.
+The database reserves an operation-specific import filename before upload and records the returned import ID. While that marker exists, confirmation, unsubscribe, new confirmation requests, and reconciliation cannot replace the job, even after the 90-second request lease expires. Retries poll the same import. Success requires a terminal `completed` job with exactly one updated row, zero created/skipped/failed rows, the same contact ID, and the requested topic verified by a fresh provider read. A confirming contact must also remain globally eligible. A terminal mismatch releases the operation without reporting success; a transient read failure retains it for retry. This serializes this application's jobs; it does not lock changes made independently in Resend.
+
+**Status: the automatic newsletter flow is repaired and has passed live acceptance.** Newsletter Edge Function **v8** is deployed with source SHA-256 `2831043805112e715d5b41061bc2db5652234fcec743657c2817b8721b7c8068`, and the durable-import migration is live. The browser unsubscribe returned HTTP 200 in about 8.7 seconds; Resend changed the newsletter topic from `opt_in` to `opt_out`. An unrelated private test topic remained opted in, global `unsubscribed=true` and name fields were preserved, and newsletter segment membership remained. The database became unsubscribed and cleared the operation/import fields. A globally opted-out contact's reconfirmation was rejected with HTTP 409. An initial provider GET timeout happened before mutation; retry after the 90-second lease succeeded.
+
+The updated local suites pass **58 Edge tests and 120 database checks**. Live RPC grants deny both browser roles and permit the service role. Fresh normal confirmation passed with HTTP 200 in about 20.7 seconds and verified provider/database subscription. Final automatic unsubscribe passed with HTTP 200 in about 7.7 seconds: newsletter `opt_out`, global `unsubscribed=false` preserved, unrelated fixture topic still `opt_in`, and database confirmation tokens/import/operation fields cleared. Replaying the used confirmation returned HTTP 410 in about 0.9 seconds. The original controlled user remains newsletter opted out. Final repair-fixture cleanup is complete; the corresponding production source merge remains required before future backend deployments. No campaign was sent. Ordering remains independent of this newsletter validation. Every eventual newsletter Broadcast must select **both** the dedicated newsletter segment and **TLB Newsletter** topic; segment membership alone does not establish current consent.
+
+Cleanup passed. The original controlled user's newsletter topic remains `opt_out`. The separate repair fixture is newsletter opted out and was deliberately globally suppressed after acceptance; its unsubscribe-token hash was removed and audit history retained. The private auxiliary test topic was deleted, and an independent topic list contains only TLB Newsletter. The original expired test operation was cancelled. The diagnostic endpoint now requires JWT verification and returns HTTP 410 without reading the Resend secret or performing mutations. Local private probe/token JSON files were removed and their absence verified. No test email campaign was sent.
+
+### Recover an import whose upload response was lost
+
+An upload timeout or lost response can leave a durable filename without an import ID. The provider may still execute that job. **Never submit a replacement import, clear the marker, or infer failure from elapsed time.** Contact-import GET/list responses do not document a filename field, so list results cannot reliably recover the job by filename.
+
+1. As an authorized operator, inspect the single affected subscriber in Supabase SQL Editor. Record its `operation_id`, `operation_kind`, `provider_import_filename`, `provider_import_started_at`, and current `provider_import_id` privately. Do not select token hashes or unrelated contacts.
+2. Find the exact `POST /contacts/imports` request in Resend API logs, matching the operation-specific filename, timestamp, and affected contact. Recover its response import ID and check that exact job with `GET /contacts/imports/{id}`. Do not attach a guessed or merely recent import. If acceptance cannot be established, keep the operation blocked and investigate with Resend support.
+3. When its existing request lease has expired, acquire a recovery lease:
+
+   ```sql
+   select public.newsletter_service('resume_import', jsonb_build_object(
+     'email', 'AFFECTED_EMAIL'
+   ));
+   ```
+
+   Inspect the result. Continue only when `resume_import` is `true` and the returned operation and filename match the exact job established above. If `busy` is true, allow the current request to finish; do not override its lease.
+4. Within that 90-second lease, attach the verified provider ID using the service-only RPC:
+
+   ```sql
+   select public.newsletter_service('mark_import_id', jsonb_build_object(
+     'email', 'AFFECTED_EMAIL',
+     'operation_id', 'EXACT_OPERATION_UUID',
+     'provider_import_filename', 'tlb-newsletter-EXACT_OPERATION_UUID.csv',
+     'provider_import_id', 'VERIFIED_PROVIDER_IMPORT_UUID'
+   ));
+   ```
+
+   Require `recorded=true`. The RPC rejects an expired lease, a mismatched operation/filename, or replacement of an already recorded different import ID.
+5. Allow the recovery lease to expire, then retry the account action or revisit account preferences. The handler polls the recorded job and applies its normal counts/contact/topic checks before completing the local state. Verify the provider and account state agree. Retain the consent history and record the recovery without publishing customer details or secrets.
 
 ### Compact reproduction for provider support
 
@@ -130,4 +167,4 @@ The deployed mitigation reads the stored topic state after topic writes and afte
 3. Repeat the GET. The observed topic remains `opt_in`, including after more than 20 minutes. The documented email-address path gives the same result. The object-wrapped body instead returns HTTP 422 `validation_error`.
 4. Provide request timestamps, provider request/log IDs, sanitized bodies/statuses, and before/after topic state to Resend support. Keep API keys, authorization headers, customer addresses, and confirmation links out of public reports. Ask why the accepted mutation does not persist and request a verified supported correction.
 
-After resolution, repeat automatic unsubscribe and separately confirmed resubscription, verify provider and account state agree, and confirm unrelated topic/global preferences are unchanged. Clean up any subscriptions created during those new checks; the original controlled test contact's manual cleanup is already confirmed. No campaign is needed for these checks.
+The replacement import flow has now passed automatic unsubscribe and separately confirmed resubscription with matching provider/database state and preserved unrelated preferences. Repair acceptance used token links on mobile `newsletter.html`; the signed-in account UI was not rerun live after this repair. The raw-array PATCH behavior remains a separate provider-support issue. Repair-fixture cleanup is complete, consent history is retained, and the original controlled user's opt-out remains confirmed. No campaign was needed for these checks.

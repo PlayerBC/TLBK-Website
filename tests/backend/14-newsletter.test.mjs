@@ -189,7 +189,10 @@ export default async function ({ db, check, state }) {
     const events = await scalar('select count(*)::int from tlb.newsletter_events');
     const orderFunction = await scalar("select pg_get_functiondef('public.shop_api(text,jsonb,text)'::regprocedure)");
     const serviceFunction = await scalar("select pg_get_functiondef('public.shop_service(text,jsonb)'::regprocedure)");
+    const newsletterFunction = await scalar("select pg_get_functiondef('public.newsletter_service(text,jsonb)'::regprocedure)");
     await db.exec(migration);
+    // Keep subsequent newsletter upgrades installed after replaying this older migration.
+    await db.exec(newsletterFunction);
     assert.deepEqual((await db.query('select * from tlb.newsletter_subscribers order by email')).rows, before);
     assert.equal(await scalar('select count(*)::int from tlb.newsletter_events'), events);
     assert.equal(await scalar("select pg_get_functiondef('public.shop_api(text,jsonb,text)'::regprocedure)"), orderFunction);
@@ -199,4 +202,3 @@ export default async function ({ db, check, state }) {
     assert.equal(await scalar("select has_function_privilege('anon','public.newsletter_service(text,jsonb)','execute')"), false);
   })();
 }
-

@@ -23,6 +23,11 @@ function token(value: unknown): string {
   if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) throw new HttpError(400, "This newsletter link is invalid. Please request a new one.");
   return value;
 }
+class ProviderError extends HttpError {
+  constructor(public providerStatus: number) {
+    super(503, "Newsletter email service is temporarily unavailable. Please try again in a moment.");
+  }
+}
 function provider() {
   const key = env("NEWSLETTER_RESEND_API_KEY") || env("RESEND_API_KEY");
   if (!key) throw new HttpError(503, "Newsletter email delivery is not configured yet.");
@@ -35,12 +40,12 @@ function provider() {
     if (Date.now() + 8000 > deadline) throw new HttpError(503, "Please wait a moment and try again.");
     previous = Date.now();
     const response = await fetch(`https://api.resend.com${path}`, {
-      method, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...(idempotency ? { "Idempotency-Key": idempotency } : {}) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(8000),
+      method, headers: { Authorization: `Bearer ${key}`, ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(idempotency ? { "Idempotency-Key": idempotency } : {}) },
+      ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) }), signal: AbortSignal.timeout(8000),
     });
     if (response.status === 404 && method === "GET") return null;
     const data = await response.json().catch(() => null);
-    if (!response.ok || !data) throw new HttpError(503, "Newsletter email service is temporarily unavailable. Please try again in a moment.");
+    if (!response.ok || !data) throw new ProviderError(response.status);
     return data;
   };
 }
@@ -61,16 +66,93 @@ async function topicPreference(api: Provider, contactId: string, topicId: string
 async function subscribed(api: Provider, contact: any, topicId: string): Promise<boolean> {
   return Boolean(contact && !contact.unsubscribed && await topicPreference(api, contact.id, topicId) === "opt_in");
 }
+class PreferenceMismatch extends HttpError {
+  constructor() { super(503, "Your newsletter preference could not be verified. Please wait a moment and try again."); }
+}
 async function verifyPreference(api: Provider, contactId: string, topicId: string, subscription: string) {
   if (await topicPreference(api, contactId, topicId) !== subscription) {
-    throw new HttpError(503, "Your newsletter preference could not be verified. Please wait a moment and try again.");
+    throw new PreferenceMismatch();
   }
 }
-async function updatePreference(api: Provider, contactId: string, topicId: string, subscription: string) {
-  // Use the documented REST array. HTTP success alone does not prove the update
-  // was applied; read back the topic before acknowledging the preference.
-  await api(`/contacts/${encodeURIComponent(contactId)}/topics`, "PATCH", [{ id: topicId, subscription }]);
-  await verifyPreference(api, contactId, topicId, subscription);
+async function waitForImport(api: Provider, state: any) {
+  if (!state.provider_import_id) {
+    // An upload may have succeeded before its response was lost. Never submit a
+    // second job: the first could run later and undo a more recent preference.
+    throw new HttpError(503, "Your newsletter update needs verification. Please contact TLB for help.");
+  }
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const job = await api(`/contacts/imports/${encodeURIComponent(state.provider_import_id)}`);
+    if (job?.status === "completed" || job?.status === "failed") {
+      const counts = job.counts;
+      if (job.status !== "completed" || counts?.total !== 1 || counts.updated !== 1 || counts.created !== 0 || counts.skipped !== 0 || counts.failed !== 0) {
+        await service("cancel_operation", { email: state.email, operation_id: state.operation_id, import_terminal: true });
+        throw new HttpError(503, "Your newsletter preference could not be updated. Please try again.");
+      }
+      return;
+    }
+    if (!["queued", "in_progress"].includes(job?.status)) throw new HttpError(503, "Unable to verify your newsletter update. Please try again.");
+    if (attempt < 11) await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new HttpError(503, "Your newsletter update is still processing. Please wait a moment and try again.");
+}
+async function updatePreference(api: Provider, state: any, contactId: string, topicId: string, subscription: string): Promise<boolean> {
+  if (await topicPreference(api, contactId, topicId) === subscription) return false;
+  const reserved = await service("mark_import_start", { email: state.email, operation_id: state.operation_id, contact_id: contactId });
+  Object.assign(state, reserved);
+  if (reserved.started) {
+    // A blank unsubscribed cell preserves global suppression. Ordinary contact
+    // upserts default it to false, so they must never update existing contacts.
+    const csv = `email,unsubscribed\n"${state.email.replace(/"/g, '""')}",\n`;
+    const form = new FormData();
+    form.append("file", new Blob([csv], { type: "text/csv" }), state.provider_import_filename);
+    form.append("column_map", JSON.stringify({ email: "email", unsubscribed: "unsubscribed" }));
+    form.append("on_conflict", "upsert");
+    form.append("topics", JSON.stringify([{ id: topicId, subscription }]));
+    let job;
+    try { job = await api("/contacts/imports", "POST", form); }
+    catch (error) {
+      if (error instanceof ProviderError && [400, 401, 403, 404, 405, 413, 415, 422, 429].includes(error.providerStatus)) {
+        await service("cancel_operation", { email: state.email, operation_id: state.operation_id, import_terminal: true });
+      }
+      throw error instanceof HttpError ? error : new HttpError(503, "Your newsletter update needs verification. Please contact TLB for help.");
+    }
+    if (typeof job?.id !== "string") throw new HttpError(503, "Your newsletter update needs verification. Please contact TLB for help.");
+    state.provider_import_id = job.id;
+    const recorded = await service("mark_import_id", { email: state.email, operation_id: state.operation_id,
+      provider_import_filename: state.provider_import_filename, provider_import_id: job.id });
+    if (recorded.recorded !== true) throw new HttpError(503, "Your newsletter update needs verification. Please contact TLB for help.");
+  }
+  await waitForImport(api, state);
+  return true;
+}
+async function finishPreference(api: Provider, state: any, config: any, imported: boolean) {
+  const contact = await api(`/contacts/${encodeURIComponent(state.email)}`);
+  if (!contact || (state.contact_id && contact.id !== state.contact_id)) {
+    if (imported) await service("cancel_operation", { email: state.email, operation_id: state.operation_id, import_terminal: true });
+    throw new HttpError(503, "Unable to verify your newsletter contact. Please try again.");
+  }
+  const confirming = state.operation_kind === "confirm";
+  if (confirming && contact.unsubscribed) {
+    await service("cancel_operation", { email: state.email, operation_id: state.operation_id, import_terminal: imported });
+    throw new HttpError(409, "Your address is opted out of all TLB marketing emails. Use the preferences link in a previous newsletter or contact TLB to rejoin.");
+  }
+  try { await verifyPreference(api, contact.id, config.topic_id, confirming ? "opt_in" : "opt_out"); }
+  catch (error) {
+    if (imported && error instanceof PreferenceMismatch) {
+      // The job is terminal: release it so a newer user action can retry. A
+      // transient read failure keeps the same job for safe recovery instead.
+      await service("cancel_operation", { email: state.email, operation_id: state.operation_id, import_terminal: true });
+    }
+    throw error;
+  }
+  await service(confirming ? "finish_confirm" : "finish_unsubscribe", {
+    email: state.email, operation_id: state.operation_id, import_terminal: imported,
+    ...(confirming ? { contact_id: contact.id, unsubscribe_token_hash: await digest(randomToken()) } : {}),
+  });
+}
+async function resumePreference(api: Provider, state: any, config: any) {
+  await waitForImport(api, state);
+  await finishPreference(api, state, config, true);
 }
 async function configuration(): Promise<any> {
   const config = await service("configuration");
@@ -118,7 +200,13 @@ Deno.serve(endpoint(async (request, headers) => {
     const userId = await verifiedUser(request);
     if (!userId) throw new HttpError(401, "Sign in to manage your newsletter preferences.");
     if (action !== "status") return json(await service(action, { user_id: userId }), 200, headers);
-    const state = await service("status", { user_id: userId });
+    let state = await service("status", { user_id: userId });
+    if (state.provider_import_pending) {
+      const pending = await service("resume_import", { email: state.email });
+      if (pending.busy) throw new HttpError(409, "Your newsletter update is still processing. Please wait a moment and try again.");
+      if (pending.resume_import) await resumePreference(provider(), pending, await configuration());
+      state = await service("status", { user_id: userId });
+    }
     if (state.status === "subscribed") {
       const config = await configuration();
       const api = provider();
@@ -141,10 +229,16 @@ Deno.serve(endpoint(async (request, headers) => {
       if (!userId) throw new HttpError(401, "Sign in to manage your newsletter preferences.");
       identity = { user_id: userId };
     } else identity = { token_hash: await digest(token(body.token)) };
-    const state = await service(action === "confirm" ? "begin_confirm" : "begin_unsubscribe", identity);
+    let state = await service(action === "confirm" ? "begin_confirm" : "begin_unsubscribe", identity);
+    if (state.resume_import) {
+      await resumePreference(api, state, config);
+      state = await service(action === "confirm" ? "begin_confirm" : "begin_unsubscribe", identity);
+    }
     if (state.valid === false) throw new HttpError(410, "This newsletter link has expired or has already been replaced. Please request a new one.");
     if (state.busy) throw new HttpError(409, "Your newsletter preferences are being updated. Please wait a moment and try again.");
     if (state.done) return json({ ok: true, status: "unsubscribed" }, 200, headers);
+    if (state.resume_import) throw new HttpError(409, "Your newsletter preferences are being updated. Please try again.");
+    state.operation_kind = action;
     let contact = await api(`/contacts/${encodeURIComponent(state.email)}`);
     if (action === "confirm") {
       if (state.already_subscribed) {
@@ -161,14 +255,22 @@ Deno.serve(endpoint(async (request, headers) => {
         await verifyPreference(api, contact.id, config.topic_id, "opt_in");
       } else {
         await api(`/contacts/${encodeURIComponent(contact.id)}/segments/${encodeURIComponent(config.segment_id)}`, "POST");
-        await updatePreference(api, contact.id, config.topic_id, "opt_in");
+        state.contact_id = contact.id;
+        const imported = await updatePreference(api, state, contact.id, config.topic_id, "opt_in");
+        await finishPreference(api, state, config, imported);
+        return json({ ok: true, status: "subscribed" }, 200, headers);
       }
       if (!contact?.id) throw new HttpError(503, "Subscription could not be confirmed. Please try again in a moment.");
       const unsubscribeToken = randomToken();
       await service("finish_confirm", { email: state.email, operation_id: state.operation_id, contact_id: contact.id, unsubscribe_token_hash: await digest(unsubscribeToken) });
       return json({ ok: true, status: "subscribed" }, 200, headers);
     }
-    if (contact) await updatePreference(api, contact.id, config.topic_id, "opt_out");
+    if (contact) {
+      state.contact_id = contact.id;
+      const imported = await updatePreference(api, state, contact.id, config.topic_id, "opt_out");
+      await finishPreference(api, state, config, imported);
+      return json({ ok: true, status: "unsubscribed" }, 200, headers);
+    }
     await service("finish_unsubscribe", { email: state.email, operation_id: state.operation_id });
     return json({ ok: true, status: "unsubscribed" }, 200, headers);
     // Ambiguous network failures deliberately retain the lease until expiry.
