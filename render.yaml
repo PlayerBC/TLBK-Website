@@ -1,0 +1,22 @@
+# Deploy this API in the bakery owner's Render account.
+# MONGODB_URI is entered privately in Render, never committed to GitHub.
+services:
+  - type: web
+    name: tlbk-content-api
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: content-api
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 30 app:app
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: MONGODB_URI
+        sync: false
+      - key: DATABASE_NAME
+        value: tlb_kitchen_website
+      - key: ALLOWED_ORIGINS
+        value: https://thelittlebakerkitchen.com,https://www.thelittlebakerkitchen.com
