@@ -18,7 +18,7 @@ const order = overrides => ({
 const view = (orders, filter = { period: 'this_month' }, products = []) => renderAnalytics({ orders, products, analyticsFilter: filter }, helpers);
 const metric = (html, name) => html.match(new RegExp(`data-analytics-metric="${name}">([^<]*)`))?.[1];
 
-test('rendered sales, average and rankings reflect saved edits while original approval stays separate', () => {
+test('rendered sales, average and rankings reflect saved edits without payment comparison figures', () => {
   const original = view([order()]);
   assert.equal(metric(original, 'sales'), '₱130.00');
   const changed = view([order({
@@ -28,8 +28,7 @@ test('rendered sales, average and rankings reflect saved edits while original ap
   assert.equal(metric(changed, 'sales'), '₱320.00');
   assert.equal(metric(changed, 'average'), '₱320.00');
   assert.equal(metric(changed, 'units'), '2');
-  assert.match(changed, /Originally approved payments<\/dt><dd>₱130\.00/);
-  assert.match(changed, /Order values above original approvals<\/dt><dd>₱190\.00/);
+  assert.doesNotMatch(changed, /Originally approved payments|Order values above original approvals/);
   assert.match(changed, /Nori<\/th><td>2<\/td><td>1<\/td><td>₱260\.00/);
 });
 
@@ -40,7 +39,7 @@ test('unpaid and cancelled orders remain counted but do not inflate sales or top
   assert.equal(metric(html, 'average'), '—');
   assert.equal(metric(html, 'units'), '0');
   assert.match(html, /No paid products in this period/);
-  assert.match(html, /Originally approved payments<\/dt><dd>₱130\.00/);
+  assert.doesNotMatch(html, /Originally approved payments/);
 });
 
 test('Manila placement dates filter rendered report independently of fulfillment date', () => {
@@ -66,15 +65,37 @@ test('empty report has zero sales, an unavailable average and a useful empty sta
   assert.doesNotMatch(html, /NaN|undefined|Infinity/);
 });
 
-test('full-refund label removes sales and shows the refunded value separately', () => {
+test('full-refund label excludes sales without showing removed refund metrics', () => {
   const html = view([order({ refund_label: true })]);
   assert.equal(metric(html, 'sales'), '₱0.00');
   assert.equal(metric(html, 'average'), '—');
   assert.equal(metric(html, 'units'), '0');
-  assert.match(html, /Paid orders with a Refund label<\/dt><dd>1/);
-  assert.match(html, /Full-refund order value<\/dt><dd>₱130\.00/);
-  assert.match(html, /A Refund label removes the full current order value/);
-  assert.doesNotMatch(html, /Refund labels alone do not deduct money/);
+  assert.doesNotMatch(html, /Paid orders with a Refund label|Full-refund order value|Full refund · paid orders/);
+  assert.match(html, /exclude cancelled, expired and Refund-labelled orders/);
+});
+
+test('useful customer, completed-order and promo metrics replace the approval comparison panel', () => {
+  const html = view([
+    order({id: 'one', buyer: {email: 'buyer@example.test'}, fulfillment_status: 'completed', promo_snapshot: {code: 'SAVE10'}, discount_cents: 1000}),
+    order({id: 'two', buyer: {email: 'BUYER@example.test'}, promo_snapshot: {code: 'SAVE10'}, discount_cents: 1000}),
+  ]);
+  assert.equal(metric(html, 'customers'), '1');
+  assert.equal(metric(html, 'completed'), '1');
+  assert.equal(metric(html, 'promo-uses'), '2');
+  assert.equal(metric(html, 'repeat-customers'), '1');
+  assert.match(html, /<h2>Sales breakdown<\/h2>/);
+  assert.match(html, /<h2>Promo code use<\/h2><span class="badge">1 code used/);
+  assert.match(html, /SAVE10<\/th><td>2<\/td><td>₱20\.00/);
+  assert.doesNotMatch(html, /Original payment approvals|Originally approved payments|Full-refund order value|Paid orders with a Refund label|Order values (above|below) original approvals|no recorded approved amount/);
+});
+
+test('promo code labels are escaped and an empty report contains zero customer and promo counts', () => {
+  const html = view([order({promo_snapshot: {code: '<script>code</script>'}, discount_cents: 100})]);
+  assert.doesNotMatch(html, /<script/i);
+  assert.match(html, /&lt;SCRIPT&gt;CODE&lt;\/SCRIPT&gt;/);
+  const empty = view([]);
+  for (const name of ['customers', 'completed', 'promo-uses', 'repeat-customers']) assert.equal(metric(empty, name), '0');
+  assert.match(empty, /No paid orders used a promo discount in this period/);
 });
 
 test('pickup and delivery percentages use the eligible paid-order denominator', () => {

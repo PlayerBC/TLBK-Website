@@ -305,8 +305,16 @@ Review the merge and deployment walkthrough in [SETUP.md](SETUP.md). A completed
 
 ### Analytics refunds and fulfillment mix
 
-- [ ] A paid order with a Refund label contributes zero sales, units, product-ranking value and pickup/delivery count, including when already completed. Original payment approval stays visible.
+- [ ] A paid order with a Refund label contributes zero sales, units, product-ranking value, customer/completed/promo counts and pickup/delivery count, including when already completed.
 - [ ] Applying the label to an edited order excludes its latest total, including delivery after discounts. Removing it restores the latest values if paid and not cancelled/expired.
 - [ ] Cancelled plus Refund-labelled orders are excluded once. An unpaid labelled order cannot reduce sales or add a monetary refund.
 - [ ] Pickup and delivery percentages count only paid orders excluding cancellations, expiry and full refunds. They show 0% when none qualify.
 - [ ] Refund changes appear in the original placement-date period. Refresh loads another staff member’s changes.
+
+### Customer, completion and promo analytics
+
+- [ ] Original approval totals, full-refund values, paid-with-refund counts and above/below-approval comparisons are absent from Analytics.
+- [ ] Two qualifying paid orders using the same buyer email (including differences in case/space) count as one customer and one repeat customer. Names and contact details do not appear in the report.
+- [ ] Completed orders count only qualifying paid orders currently marked Completed. The selected period uses placement date, and repeat customers need two qualifying orders inside that period.
+- [ ] Promo uses count paid, non-cancelled, non-refunded orders with a saved code and positive discount once per order. Distinct code count and per-code orders/discount totals agree, including deleted or inactive saved codes.
+- [ ] No-order periods show zero customer/completion/promo counts and an empty promo explanation. Desktop and mobile layouts remain readable.

@@ -5,8 +5,8 @@ import { socialContactMessage } from './checkout-fields.js?v=social-contact-1';
 import { fulfillmentStatus, matchesFulfillmentStatus, isActiveFulfillment, needsPaymentReview } from './refund-status.js?v=cancelled-review-1';
 import { productLabelSettings, labelTextColor, MAX_LABEL_LENGTH } from './product-label.js';
 import { dateCalendar, bindDateCalendars } from './date-calendar.js';
-import { analyticsDateRange, buildAnalytics } from './analytics.js?v=refunds-1';
-import { renderAnalytics } from './analytics-view.js?v=visitors-2';
+import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-metrics-1';
+import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
 
 const $ = (selector, scope = document) => scope.querySelector(selector);

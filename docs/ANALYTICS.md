@@ -8,10 +8,16 @@ Choose Today, Last 7 days, Last 30 days, This month, All time, or Custom dates. 
 | --- | --- |
 | Number of orders | Every order placed in the selected period, including unpaid, cancelled and expired orders. |
 | Sales | Latest order totals for paid orders, excluding cancelled, expired and Refund-labelled orders. Includes discounts and delivery fees. Completed orders remain included. |
+| Customers | Distinct buyer email addresses on the paid orders counted in sales. Email is trimmed and matched without case sensitivity, combining guest and signed-in purchases using the same address. Missing emails do not create an invented customer. This is purchasing customers, not registered accounts or visitors. |
+| Completed orders | Orders counted in sales whose latest fulfillment status is Completed. The period still uses placement date, not completion date. |
+| Repeat customers | Customers with at least two orders counted in sales within the selected period. This is not a lifetime repeat-purchase count. |
+| Promo uses | Orders counted in sales with both a saved promo code and a positive current discount, once per order regardless of quantity. |
 | Average order value | Sales divided by the number of paid orders excluding cancellations, expiry and full refunds. An empty paid-order set shows a dash. |
 | Units ordered | Latest product quantities in the orders counted in sales. One box/pouch is one sellable unit. |
 | Top products | Top ten products by units, combining different flavors/options under their parent product. Ties use item value, then name. Item value is before order discounts and excludes delivery. |
-| Order status | Current paid, full-refund, awaiting-payment, review, expired and cancelled counts. Full-refund counts may overlap with cancelled orders. Expired/cancelled percentages use all selected orders. |
+| Order status | Completed, paid-to-fulfill, awaiting-payment, review, expired and cancelled counts. Refunded orders are excluded from completed and pending work. Expired/cancelled percentages use all selected orders. |
+| Sales breakdown | Product subtotal, discounts, delivery fees and sales from qualifying paid orders. |
+| Promo code use | Top ten saved codes by qualifying discounted order count, then discount value and code. Shows orders and discounts per code; the badge counts all distinct codes used. Deleted or inactive codes still appear if saved on a qualifying order. |
 | Pickup versus delivery | Current fulfillment method for paid orders only, excluding cancelled, expired and Refund-labelled orders. Percentages use this same eligible paid-order count, not all orders. |
 | Sales over time | Current sales and the number of qualifying paid orders attributed to placement dates. The chart tooltip and **View exact figures → Paid orders** exclude unpaid, cancelled, expired and Refund-labelled orders, matching sales. Completed paid orders remain included. Long date ranges group into weeks or months. |
 
@@ -19,13 +25,13 @@ Choose Today, Last 7 days, Last 30 days, This month, All time, or Custom dates. 
 
 Saving an order edit changes the quantities, sales, average and product ranking the next time Analytics renders with that saved order. Opening Analytics fetches fresh data, and **Refresh analytics** picks up changes saved by another team member. The update time is shown on the page. This is a current-state report: editing an older order changes the figures for its original placement period.
 
-Cancelling a paid order removes its current value and quantities from sales/top products and the pickup/delivery breakdown. Its original approved payment remains in **Sales and payment details** because cancellation alone does not prove a refund was sent.
+Cancelling a paid order excludes it from sales, customer and repeat-customer counts, completed orders, promo performance, units, product rankings and the pickup/delivery breakdown.
 
-**Original payment approvals** preserve the amount recorded when payment was approved. They do not change when an order is edited. A **Refund label means a full refund for analytics**. It excludes the entire latest order total, including delivery after discounts, from sales, average order value, units, product rankings, trends and the pickup/delivery breakdown. Removing the label restores those figures if the order remains paid and is not cancelled or expired. A cancelled order is already excluded, so the label cannot deduct it twice.
+A **Refund label means a full refund for analytics**. It excludes the order from sales, customers, repeat customers, completed orders, promo performance, average order value, units, product rankings, trends and the pickup/delivery breakdown. Removing the label restores those figures if the order remains paid and is not cancelled or expired. A cancelled order is already excluded, so the label cannot deduct it twice.
 
-**Full-refund order value** reports the latest totals of paid orders carrying this label, including orders already cancelled. It is shown for reference and is not an extra subtraction from the already-adjusted sales total. Unpaid orders with a label contribute no refund value. Applying a label updates the original order-placement period, not a separate refund-date period.
+Original approval totals, refund-value totals, paid-with-refund counts and differences above/below original approvals are no longer shown in Analytics. Original payment records remain available in individual orders. Applying a refund label updates the original order-placement period, not a separate refund-date period.
 
-Original payment approvals remain unchanged. Differences above/below approvals exclude Refund-labelled orders. The label does not transfer money or prove a transfer completed; you still send the full refund manually. Fulfillment, stock and promo usage are unaffected by the label itself.
+Promo analytics measures discounted sales in the selected period. It does not replace redemption-limit accounting: previously redeemed uses can remain counted against a promo limit after cancellation or an amendment removes the discount. Editing an order's email, completion status or promo discount updates the corresponding analytics for its placement period. Buyer details are used to calculate counts and are not displayed in the report.
 
 This page reports order values, not profit or a cash ledger. All calculations use the authenticated admin order data already available to the dashboard; this feature does not change orders, stock, payments, or email delivery.
 
@@ -34,8 +40,8 @@ This page reports order values, not profit or a cash ledger. All calculations us
 1. Open Analytics and select **All time**. Compare the total order count with Orders using cleared filters.
 2. Check that unpaid and expired orders do not increase sales.
 3. Choose a paid order and check its latest total and quantities against the relevant placement-date report.
-4. When making a legitimate order amendment, save it, return to Analytics, and confirm sales and units reflect the amended order. The original approved payment should stay the same.
-5. Use a custom date range that contains no orders. Sales should be ₱0.00 and average order value should show a dash.
+4. With local fixtures, check that two qualifying orders using the same email count as one customer and one repeat customer. A promo counts once per discounted order regardless of quantity. Change the date range: repeat customers need two qualifying orders inside that range.
+5. Use a custom date range that contains no orders. Counts and sales should be zero, average order value should show a dash, and the promo panel should explain that no paid orders used a discount.
 
 Use local fixtures for destructive test scenarios. Do not cancel real customer orders solely to test reporting.
 

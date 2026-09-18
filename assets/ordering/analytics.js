@@ -99,6 +99,8 @@ export function buildAnalytics(orders = [], {start = '', end = '', today = manil
     awaitingPaymentCount: 0, underReviewCount: 0, expiredCount: 0, cancelledCount: 0,
     refundFlaggedCount: 0, paidAdjustmentCount: 0, pickupCount: 0, deliveryCount: 0,
     refundedPaidOrderCount: 0, fullRefundOrderValueCents: 0,
+    customerCount: 0, repeatCustomerCount: 0, completedOrderCount: 0, toFulfillCount: 0,
+    promoUseCount: 0, distinctPromoCodeCount: 0, promoCodes: [],
     totalUnits: 0, topProducts: [], trend: [], trendUnit: 'day', trendInterval: 1
   };
   if (invalidRange) return result;
@@ -111,14 +113,16 @@ export function buildAnalytics(orders = [], {start = '', end = '', today = manil
   }
   const names = new Map((Array.isArray(products) ? products : []).filter(Boolean).map(product => [String(product.id), product.name]));
   const productTotals = new Map();
+  const customers = new Map();
+  const promoTotals = new Map();
   result.totalOrders = rows.length;
   rows.forEach(({order}, index) => {
     const closed = CLOSED.has(order.fulfillment_status);
     if (order.fulfillment_status === 'expired') result.expiredCount++;
     if (order.fulfillment_status === 'cancelled') result.cancelledCount++;
     if (order.refund_label === true) result.refundFlaggedCount++;
-    if (!closed && order.payment_status === 'awaiting_payment') result.awaitingPaymentCount++;
-    if (!closed && order.payment_status === 'under_review') result.underReviewCount++;
+    if (!closed && order.refund_label !== true && order.payment_status === 'awaiting_payment') result.awaitingPaymentCount++;
+    if (!closed && order.refund_label !== true && order.payment_status === 'under_review') result.underReviewCount++;
     if (order.payment_status !== 'paid') return;
     result.paidOrderCount++;
     const approved = nonnegativeInteger(order.paid_amount_cents);
@@ -135,6 +139,23 @@ export function buildAnalytics(orders = [], {start = '', end = '', today = manil
     }
     // A cancelled, expired or fully refunded sale is excluded once, never subtracted twice.
     if (closed || order.refund_label === true) return;
+    // Buyer email is required at checkout. Normalize case/space so guest and
+    // signed-in purchases count together without exposing contact details.
+    const email = typeof order.buyer?.email === 'string' ? order.buyer.email.trim().toLowerCase() : '';
+    if (email) customers.set(email, (customers.get(email) || 0) + 1);
+    if (order.fulfillment_status === 'completed') result.completedOrderCount++;
+    else result.toFulfillCount++;
+    // Use the saved purchase, including archived/deleted codes. A discount
+    // removed by a later amendment no longer counts as a discounted sale.
+    const code = typeof order.promo_snapshot?.code === 'string' ? order.promo_snapshot.code.trim().toUpperCase() : '';
+    const discount = cents(order.discount_cents);
+    if (code && discount > 0) {
+      if (!promoTotals.has(code)) promoTotals.set(code, {code, orderCount: 0, discountCents: 0});
+      const promo = promoTotals.get(code);
+      promo.orderCount++;
+      promo.discountCents += discount;
+      result.promoUseCount++;
+    }
     if (order.method === 'pickup') result.pickupCount++;
     if (order.method === 'delivery') result.deliveryCount++;
     result.activePaidOrderCount++;
@@ -165,6 +186,10 @@ export function buildAnalytics(orders = [], {start = '', end = '', today = manil
     }
   });
   result.averageApprovedPaymentCents = result.approvedAmountOrderCount ? Math.round(result.approvedPaymentsCents / result.approvedAmountOrderCount) : null;
+  result.customerCount = customers.size;
+  result.repeatCustomerCount = [...customers.values()].filter(orders => orders >= 2).length;
+  result.promoCodes = [...promoTotals.values()].sort((a, b) => b.orderCount - a.orderCount || b.discountCents - a.discountCents || a.code.localeCompare(b.code));
+  result.distinctPromoCodeCount = promoTotals.size;
   result.averageOrderValueCents = result.activePaidOrderCount ? Math.round(result.currentOrderValueCents / result.activePaidOrderCount) : null;
   result.topProducts = [...productTotals.values()].map(({orderIndexes, ...product}) => ({...product, orderCount: orderIndexes.size}))
     .sort((a, b) => b.units - a.units || b.lineValueCents - a.lineValueCents || String(a.name).localeCompare(String(b.name)) || a.productId.localeCompare(b.productId));
