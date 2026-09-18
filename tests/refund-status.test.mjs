@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fulfillmentStatus, matchesFulfillmentStatus, isActiveFulfillment } from '../assets/ordering/refund-status.js';
+import { fulfillmentStatus, matchesFulfillmentStatus, isActiveFulfillment, needsPaymentReview } from '../assets/ordering/refund-status.js';
 import { buildAnalytics } from '../assets/ordering/analytics.js';
 
 const paidOrder = overrides => ({
@@ -10,6 +10,18 @@ const paidOrder = overrides => ({
   discount_cents: 0, delivery_cents: 0,
   items: [{ product_id: 'nori', name: 'Nori chips', quantity: 2, unit_price_cents: 10000, line_total_cents: 20000 }],
   ...overrides,
+});
+
+test('only active, unrefunded payment reviews appear in the review queue', () => {
+  const review = paidOrder({ payment_status: 'under_review', fulfillment_status: 'pending_confirmation' });
+  assert.equal(needsPaymentReview(review), true);
+  for (const status of ['cancelled', 'expired', 'completed', 'confirmed']) {
+    assert.equal(needsPaymentReview({ ...review, fulfillment_status: status }), false);
+  }
+  assert.equal(needsPaymentReview({ ...review, refund_label: true }), false);
+  for (const payment_status of ['awaiting_payment', 'paid', 'rejected', 'cancelled']) {
+    assert.equal(needsPaymentReview({ ...review, payment_status }), false);
+  }
 });
 
 test('refund display preserves original progress and payment, and removing the label restores them', () => {
