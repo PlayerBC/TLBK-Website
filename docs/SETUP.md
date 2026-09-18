@@ -358,6 +358,10 @@ In **Shop settings → Delivery zones → + Add zone**, enter Zone name `DEMO de
 
 A *scheduler*, also called Cron, runs the email worker every five minutes. [Supabase scheduling](https://supabase.com/docs/guides/functions/schedule-functions).
 
+When a customer submits valid payment proof and the order becomes **Under review**, every verified account assigned **Staff** or **Owner** receives an individual review email. Recipients follow the accounts in **Staff access** automatically; the business contact email is not the recipient list. These notifications include the order reference, customer name, fulfillment date/method, total, and a link to the admin dashboard, where staff sign-in is required. They are independent of the fulfillment-day reminder setting.
+
+Review emails use the next available worker cycle; queue volume and retries can delay delivery. The sender skips queued alerts if the recipient loses their role or verified email address, or if the order has already been approved, rejected, or cancelled. No notification is sent merely for starting a proof upload, and existing orders are not backfilled when this feature is installed.
+
 ### Enable the required extensions
 
 In **Supabase → Database → Extensions**, enable `pg_cron`, `pg_net` and `supabase_vault` if needed. They provide scheduling, server requests and secure settings storage. Vault is Supabase's private store for secrets. [Cron](https://supabase.com/docs/guides/cron), [Vault](https://supabase.com/docs/guides/database/vault).

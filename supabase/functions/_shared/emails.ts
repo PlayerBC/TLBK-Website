@@ -12,6 +12,18 @@ const selections = (item: any): string => (Array.isArray(item.selection_labels) 
   .map((choice: any) => typeof choice === "string" ? choice : `${choice.group ? `${choice.group}: ` : ""}${choice.label || "Option"}${choice.quantity ? ` × ${choice.quantity}` : ""}${Number(choice.surcharge_cents) ? ` (+${money(choice.surcharge_cents)} each)` : ""}`)
   .join(", ");
 
+function renderReviewEmail(order: any, settings: any, site: URL): { html: string; text: string } {
+  const link = new URL("manage.html", site).toString();
+  const shop = settings.shop_name || "The Little Baker Kitchen";
+  const heading = "An order is ready for review";
+  const message = "A customer has submitted payment proof. Sign in with your staff or owner account, open the order below, and review the proof before approving or rejecting payment.";
+  const details = `Order reference: ${order.reference}\nCustomer: ${order.buyer_name || "See the order in the dashboard"}\nFulfillment: ${date(order.fulfillment_date)} · ${order.method}\nOrder total: ${money(order.total_cents)}`;
+  const footer = "You received this notification because your account is assigned a Staff or Owner role. The dashboard shows the current order status.";
+  const text = `${shop}\n${heading}\n\n${message}\n\n${details}\n\nOpen the admin dashboard:\n${link}\n\n${footer}`;
+  const html = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Order ready for review</title></head><body style="margin:0;background:#fff8f2;font-family:Arial,sans-serif;color:#342320"><table role="presentation" width="100%" style="padding:24px 12px"><tr><td align="center"><table role="presentation" width="100%" style="max-width:600px;background:white;border:1px solid #eedbd2;border-radius:12px"><tr><td style="padding:28px"><p style="color:#af4947;font-weight:bold">${escape(shop)}</p><h1 style="font-size:25px;line-height:1.25">${heading}</h1><p style="line-height:1.6">${message}</p><p style="line-height:1.8;background:#fff8f2;padding:16px">${lines(details)}</p><p style="margin:28px 0"><a href="${escape(link)}" style="background:#af4947;color:#fff;padding:13px 20px;text-decoration:none;border-radius:6px;display:inline-block">Open orders for review</a></p><p style="font-size:12px;color:#695955;line-height:1.5">${footer}</p></td></tr></table></td></tr></table></body></html>`;
+  return { html, text };
+}
+
 export function renderEmail(payload: any): { html: string; text: string } {
   const order = payload?.order;
   const settings = { ...payload?.settings };
@@ -19,7 +31,8 @@ export function renderEmail(payload: any): { html: string; text: string } {
   for (const key of ["payment_instructions", "pickup_address", "pickup_hours", "pickup_instructions", "delivery_window", "contact_email", "contact_phone"]) {
     if (order?.[key] !== undefined && order[key] !== null) settings[key] = order[key];
   }
-  if (!order?.id || !order?.reference || !order?.access_token || !settings?.site_url) {
+  const review = payload?.event_type === "order_review_required";
+  if (!order?.id || !order?.reference || (!review && !order?.access_token) || !settings?.site_url) {
     throw new HttpError(503, "Email configuration is incomplete: set the site URL and confirm the saved order access token.");
   }
   let site: URL;
@@ -28,6 +41,7 @@ export function renderEmail(payload: any): { html: string; text: string } {
   site.search = "";
   site.hash = "";
   site.pathname = `${site.pathname.replace(/\/$/, "")}/`;
+  if (review) return renderReviewEmail(order, settings, site);
   const access = new URL("shop.html", site);
   access.hash = new URLSearchParams({ order: order.id, token: order.access_token }).toString();
   const link = access.toString();

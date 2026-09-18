@@ -261,6 +261,51 @@ test('worker requires its own secret and skips invalidated reminders', async () 
   assert.equal(providerCalls, 0);
 });
 
+test('staff review email uses an authenticated dashboard link and never renders customer tokens or proof paths', () => {
+  const review=payload('order_review_required');
+  Object.assign(review.order,{buyer_name:'Customer <script>alert(1)</script>',proof_path:'private/proof.png'});
+  delete review.order.access_token;
+  const rendered=renderEmail(review);
+  for(const content of [rendered.html,rendered.text]){
+    assert.match(content,/An order is ready for review/);
+    assert.match(content,/TLB-TEST/);
+    assert.match(content,/₱600\.00/);
+    assert.match(content,/https:\/\/preview\.test\/manage\.html/);
+    assert.doesNotMatch(content,/token=|shop\.html|private\/proof|Test instructions|Reference did not match/);
+  }
+  assert.match(rendered.html,/Customer &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(rendered.html,/<script>/);
+  assert.match(rendered.html,/<html lang="en">/);
+  review.order.access_token='private-guest-token';
+  assert.doesNotMatch(JSON.stringify(renderEmail(review)),/private-guest-token/);
+  for(const site_url of ['http://preview.test','javascript:alert(1)','https://user:password@preview.test']){
+    assert.throws(()=>renderEmail({...review,settings:{...review.settings,site_url}}),/HTTPS/);
+  }
+});
+
+test('staff notifications are individually addressed and use their own stable provider event key', async () => {
+  const events=[];
+  const review=payload('order_review_required');delete review.order.access_token;
+  const row={id:orderId,lease_token:userId,event_key:'review:order:2:staff-address-hash',to_email:'staff@example.test',subject:'Order ready for review · TLB-TEST',payload:review,first_attempt_at:new Date().toISOString()};
+  globalThis.fetch=async(url,options)=>{
+    if(String(url).includes('resend.com')){
+      const sent=JSON.parse(options.body);
+      assert.deepEqual(sent.to,['staff@example.test']);
+      assert.equal(options.headers['Idempotency-Key'],row.event_key);
+      assert.match(sent.html,/manage\.html/);assert.match(sent.text,/payment proof/);
+      assert.doesNotMatch(options.body,/private-guest-token/);
+      events.push('provider');return reply({id:'review-provider-id'});
+    }
+    const body=JSON.parse(options.body);events.push(body.p_action);
+    if(body.p_action==='claim_emails')return reply([row]);
+    if(body.p_action==='prepare_email')return reply(row);
+    return reply({});
+  };
+  const response=await worker(new Request('https://worker.test',{method:'POST',headers:{'x-worker-token':environment.EMAIL_WORKER_TOKEN}}));
+  assert.equal((await response.json()).accepted,1);
+  assert.deepEqual(events,['maintenance','claim_emails','prepare_email','provider','email_sent']);
+});
+
 test('worker uses stable idempotency key and only records provider acceptance after API success', async () => {
   const events = [];
   const row = { id: orderId, lease_token: userId, event_key: 'submitted:test-order', to_email: 'owner-controlled@test.invalid', subject: 'Test', payload: payload('order_submitted'), first_attempt_at: new Date().toISOString() };
