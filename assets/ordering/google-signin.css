@@ -1,0 +1,9 @@
+.google-signin[hidden]{display:none}
+.google-signin{margin:22px 0;text-align:center}
+.google-signin-button{display:inline-block;padding:0;border:0;border-radius:28px;background:transparent;cursor:pointer;vertical-align:middle}
+.google-signin-button img{display:block;width:225px;height:50px;max-width:100%}
+.google-signin-button:hover{box-shadow:0 2px 8px #0000001a}
+.google-signin-button:focus-visible{outline:3px solid #ac6750;outline-offset:4px}
+.google-signin-button:disabled{opacity:.6;cursor:wait}
+.google-signin-divider{display:flex;align-items:center;gap:14px;margin:20px 0 0;color:#76675d;font-size:12px}
+.google-signin-divider::before,.google-signin-divider::after{content:'';height:1px;flex:1;background:#e8dfd3}

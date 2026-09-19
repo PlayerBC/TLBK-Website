@@ -1,6 +1,7 @@
 import { api, auth, authLink, ready, configured, initializationError, escapeHtml as esc, money, formatDate, toast } from './client.js';
 import { newsletterRequest } from './newsletter-client.js';
 import { mountNewsletterPreferences } from './newsletter.js?v=welcome-1';
+import { googleSignInEnabled } from './google-signin.js?v=google-1';
 
 const root = document.getElementById('account-root');
 const page = document.body.dataset.accountPage;
@@ -61,7 +62,7 @@ function accountForm() {
   const titles = { signin: 'Welcome back', signup: 'Make yourself at home', recover: 'Forgot your password?', resend: 'Verify your email' };
   const descriptions = {
     signin: 'Sign in to see your orders and use your eligible promo codes.',
-    signup: 'Create your account, then verify your email to use promo codes.',
+    signup: 'Create your account to keep your orders together and use eligible promo codes.',
     recover: 'Enter your email address to request a secure password reset link.',
     resend: 'Request a replacement verification link if yours has expired or has not arrived.',
   };
@@ -72,6 +73,7 @@ function accountForm() {
     <h2 id="auth-title">${titles[mode]}</h2><p class="muted">${descriptions[mode]}</p>
     ${disabled ? disconnectedNotice() : ''}
     <div id="account-notice" role="status" tabindex="-1" hidden></div>
+    ${['signin', 'signup'].includes(mode) && !disabled ? '<div class="google-signin" data-google-signin hidden><button type="button" class="google-signin-button" data-action="google-signin" aria-label="Sign in with Google"><img src="assets/img/brands/google-signin.svg" width="225" height="50" alt="Sign in with Google"></button><p class="google-signin-divider">or continue with email</p></div>' : ''}
     <form id="auth-form"><fieldset ${disabled ? 'disabled' : ''} style="border:0;padding:0;margin:0">
       <label class="field">Email address<input name="email" type="email" autocomplete="email" maxlength="254" required value="${esc(email)}" placeholder="you@example.com"></label>
       ${['signin', 'signup'].includes(mode) ? `<label class="field">Password<input name="password" type="password" autocomplete="${mode === 'signup' ? 'new-password' : 'current-password'}" ${mode === 'signup' ? 'minlength="10"' : ''} maxlength="128" required ${mode === 'signup' ? 'aria-describedby="password-hint"' : ''}></label>${mode === 'signup' ? '<p class="muted" id="password-hint">Use at least 10 characters. A memorable phrase works well.</p><label class="field">Confirm password<input name="confirm_password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>' : ''}` : ''}
@@ -94,6 +96,32 @@ function renderSignedOut() {
     root.querySelector('[name="email"]')?.focus();
   }));
   document.getElementById('auth-form').addEventListener('submit', submitAuth);
+  const google = root.querySelector('[data-google-signin]');
+  if (google) {
+    google.querySelector('button').addEventListener('click', signInWithGoogle);
+    googleSignInEnabled().then(enabled => { if (google.isConnected) google.hidden = !enabled; });
+  }
+}
+
+async function signInWithGoogle() {
+  if (submitting || !auth) return;
+  submitting = true;
+  const controls = [...root.querySelectorAll('button, input')].filter(node => !node.disabled);
+  controls.forEach(node => { node.disabled = true; });
+  try {
+    // OAuth stays in this tab so the existing checkout and return destination
+    // survive. Never put checkout details, tokens or a Google secret in this URL.
+    try { sessionStorage.setItem('tlb-auth-return-v1', next); } catch { /* The callback falls back to the shop. */ }
+    notice('Opening Google sign-in…');
+    const { error } = await auth.signInWithOAuth({ provider: 'google', options: {
+      redirectTo: redirect('oauth-callback.html'), queryParams: { prompt: 'select_account' },
+    } });
+    if (error) throw error;
+  } catch {
+    submitting = false;
+    controls.forEach(node => { if (node.isConnected) node.disabled = false; });
+    notice('Google sign-in could not start. Please try again or sign in with your email and password.', 'danger');
+  }
 }
 
 async function submitAuth(event) {
@@ -241,6 +269,17 @@ async function renderCallback() {
   root.setAttribute('aria-busy', 'false');
 }
 
+async function renderGoogleCallback() {
+  const problem = () => {
+    root.innerHTML = `<section class="panel account-card"><p class="eyebrow">Your account</p><h1>Google sign-in wasn’t completed</h1><p>Please try again, or use your email and password. Your saved cart is still on this browser.</p><a class="button" href="account.html?next=${encodeURIComponent(next)}">Back to sign in</a></section>`;
+    root.setAttribute('aria-busy', 'false');
+  };
+  if (!configured || initializationError || !auth || !authLink.received || authLink.failed || authLink.recovery || authLink.type === 'recovery') { problem(); return; }
+  const { data: { user }, error } = await auth.getUser();
+  if (error || !user?.email_confirmed_at) { problem(); return; }
+  location.replace(next);
+}
+
 async function renderReset() {
   if (!configured || initializationError) {
     if (configured && authLink.failed) { linkProblem(true); return; }
@@ -279,7 +318,8 @@ async function renderReset() {
 
 await ready;
 try {
-  if (page === 'callback') await renderCallback();
+  if (page === 'oauth') await renderGoogleCallback();
+  else if (page === 'callback') await renderCallback();
   else if (page === 'reset') await renderReset();
   else {
     await renderAccount();

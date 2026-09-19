@@ -49,6 +49,7 @@ try {
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.origin === origin) return route.continue();
+      if (url.pathname === '/auth/v1/settings') return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({external:{google:false}})});
       if (url.pathname === '/functions/v1/newsletter') {
         const body = route.request().postDataJSON(); state.calls.push(body);
         let response = {ok:true};
