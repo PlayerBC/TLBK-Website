@@ -20,7 +20,7 @@ All pages use shared CSS and consistent header logo at assets/img/brands/Hat.png
 `{id:uuid,name,description,category_id:uuid|null,price_cents:integer,min_quantity:integer,lead_days:integer,active:boolean,photos:string[],option_groups:[],sort_order:integer}`.
 Each option group `{id:string,label:string,required_count:integer,choices:[{id:string,label:string,surcharge_cents:integer,active:boolean}]}`. required_count=1 is single choice; >1 uses counted mix summing exactly required_count. Products can have multiple groups. Selection payload maps group ids to choice counts: `{flavour:{classic:4,matcha:2}}`. Surcharges per sellable unit. Only box/product stock, never flavor stock.
 Categories `{id,name,sort_order}`.
-Inventory `{product_id,date:YYYY-MM-DD,capacity:integer,available:boolean,reserved?:integer,remaining?:integer}`. Every sellable date requires explicit capacity row; missing row means unavailable. Shared pickup/delivery inventory.
+Inventory `{product_id,date:YYYY-MM-DD,capacity:integer|null,available:boolean,reserved:integer,remaining:integer|null,unlimited:boolean}`. Missing rows and null capacities mean unlimited; 0 means no stock. Explicit unavailable rows still block orders. Reservations are counted even when no limit exists. Shared pickup/delivery inventory. The calendar applies edited totals separately to each selected date, including quantities already ordered. Untouched saved/mixed limits remain unchanged.
 
 ## Settings shape
 

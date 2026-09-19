@@ -6,7 +6,8 @@ import { fulfillmentStatus, matchesFulfillmentStatus, isActiveFulfillment, needs
 import { renderProductPhotos, bindProductPhotoOrder } from './product-photos.js?v=photo-order-1';
 import { printOrderSlips } from './order-slips.js?v=batch-slips-1';
 import { productLabelSettings, labelTextColor, MAX_LABEL_LENGTH } from './product-label.js';
-import { dateCalendar, bindDateCalendars } from './date-calendar.js';
+import { dateCalendar, bindDateCalendars, calendarDates } from './date-calendar.js?v=daily-quantities-1';
+import { quantitySelection, quantitySaveRows, quantityStatus } from './daily-quantities.js?v=daily-quantities-1';
 import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-metrics-1';
 import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
@@ -20,7 +21,7 @@ const CLOSED = new Set(['cancelled', 'expired', 'completed']);
 const PAYMENT = ['awaiting_payment', 'under_review', 'paid', 'rejected', 'cancelled'];
 const FULFILLMENT = ['pending_confirmation', 'confirmed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'completed', 'refunded', 'cancelled', 'expired'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const state = { view: 'overview', role: null, connected: false, products: [], categories: [], inventory: [], promos: [], zones: [], orders: [], settings: {}, staff: [], filters: { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }, inventoryDate: manilaDate() };
+const state = { view: 'overview', role: null, connected: false, products: [], categories: [], inventory: [], promos: [], zones: [], orders: [], settings: {}, staff: [], filters: { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }, inventoryDates: [manilaDate()], inventoryDrafts: {} };
 state.productFilters = { search: '', status: '', category: '' };
 state.promoFilter = '';
 state.printSelection = new Set();
@@ -226,8 +227,24 @@ function productsView() {
     `<div class="product-filter-summary"><p class="muted no-margin" id="product-count" role="status">Showing ${products.length} of ${state.products.length} product${state.products.length === 1 ? '' : 's'}</p><button type="button" class="button button-quiet" data-action="clear-product-filters" ${productFiltersActive() ? '' : 'disabled'}>Clear filters</button></div><div id="product-results">${productResults(products)}</div>`;
 }
 function inventoryView() {
-  const rows = state.inventory.filter(row => row.date === state.inventoryDate);
-  return heading('Daily quantities', 'Plan each product, one fulfillment date at a time.') + `<div class="notice inventory-note">Pickup and delivery share the same product quantity on a date. Held and approved quantities count once. A date without an allocation is unavailable. Turning availability off preserves existing orders.</div><section class="panel"><h2>Set a daily allocation</h2><form data-form="inventory">${formError}<div class="inventory-form">${select('product_id', 'Product', option('', 'Choose a product', '') + state.products.map(p => option(p.id, p.name, '')).join(''), 'required')}${input('start_date', 'From date', state.inventoryDate, 'date', 'required')}${input('end_date', 'Through date', state.inventoryDate, 'date', 'required')}<span></span>${input('capacity', 'Total sellable quantity per date', '', 'number', 'min="0" step="1" required', 'Total capacity, including quantities already held or approved.')}${select('available', 'Accept new orders', option('yes', 'Available', 'yes') + option('no', 'Unavailable', 'yes'))}<span></span><button class="button" ${locked()} type="submit">Save allocation</button></div></form></section><section class="panel" style="margin-top:22px"><div class="section-heading"><h2>Quantities by date</h2>${input('inventory-date', 'Fulfillment date', state.inventoryDate, 'date', 'id="inventory-date"')}</div>${rows.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Total quantity</th><th>Held + approved</th><th>Remaining</th><th>Availability</th></tr></thead><tbody>${rows.map(row => `<tr><td>${esc(state.products.find(p => p.id === row.product_id)?.name || 'Archived product')}</td><td>${row.capacity}</td><td>${row.reserved ?? '—'}</td><td>${row.remaining ?? (row.reserved === undefined ? '—' : row.capacity - row.reserved)}</td><td>${badge(row.available ? 'available' : 'unavailable')}</td></tr>`).join('')}</tbody></table></div>` : empty('No quantities set for this date', 'Add an allocation above to make a product available for this fulfillment date.')}</section>`;
+  return heading('Daily quantities', 'Choose your dates, then set only the limits you need.') +
+    `<form data-form="inventory">${formError}<div class="quantity-layout"><aside class="panel quantity-calendar">${dateCalendar('inventory_dates', 'Select dates', state.inventoryDates, 'Choose one or more fulfillment dates.', manilaDate(), !state.connected, { saveLabel: 'Save quantities', selectionLabel: 'Apply quantities to these dates', minDate: manilaDate() })}<p class="quantity-explainer">The same total applies separately to each selected date. Pickup and delivery share the quantity.</p></aside><section class="panel quantity-products"><div class="quantity-products-heading"><div><h2>All products</h2><p>Blank = no limit · 0 = no stock</p></div><span>${state.products.length} products</span></div><p class="quantity-help">Totals include quantities already ordered. Clearing a saved quantity removes its limit. Product availability and shop schedules still apply.</p><div id="quantity-products">${inventoryProducts()}</div><div class="quantity-save"><p id="quantity-save-summary" aria-live="polite">${inventorySaveSummary()}</p><button type="button" class="button button-secondary" data-action="reset-quantities">Reset edits</button><button type="submit" class="button" ${locked()}>Save quantities</button></div></section></div></form>`;
+}
+function inventorySaveSummary() {
+  const count = Object.keys(state.inventoryDrafts).length, dates = state.inventoryDates.length;
+  return count ? `${count} edited product${count === 1 ? '' : 's'} will apply to ${dates} selected date${dates === 1 ? '' : 's'}.` : dates ? `${dates} date${dates === 1 ? '' : 's'} selected. Saved limits are shown; mixed limits stay unchanged until edited.` : 'Select at least one date to begin.';
+}
+function inventoryProducts() {
+  return state.products.length ? state.products.map(product => {
+    const value = quantitySelection(product.id, state.inventoryDates, state.inventory, state.inventoryDrafts);
+    const id = `quantity-${product.id}`, disabled = !state.connected || !state.inventoryDates.length;
+    const photo = safeImage(product.photos?.[0]);
+    return `<div class="quantity-product" data-quantity-product="${esc(product.id)}"><div class="quantity-photo">${photo ? `<img src="${esc(photo)}" alt="" loading="lazy">` : '<span>No photo</span>'}</div><div class="quantity-product-name"><label for="${esc(id)}">${esc(product.name)}</label>${product.active ? '' : '<span class="quantity-hidden">Hidden from menu</span>'}</div><div class="quantity-control-field"><label class="sr-only" for="${esc(id)}">${esc(product.name)} total quantity per date</label><div class="quantity-input-row"><input id="${esc(id)}" data-quantity-id="${esc(product.id)}" type="number" min="0" max="1000000" step="1" inputmode="numeric" value="${esc(value.value)}" placeholder="${value.mixed ? 'Mixed' : 'No limit'}" aria-describedby="${esc(id)}-status" ${disabled ? 'disabled' : ''}><button type="button" class="button button-quiet" data-action="unlimit-quantity" data-id="${esc(product.id)}" aria-label="Remove limit for ${esc(product.name)}" ${disabled ? 'disabled' : ''}>No limit</button></div><small id="${esc(id)}-status" data-quantity-status>${esc(quantityStatus(value, state.inventoryDates))}</small></div></div>`;
+  }).join('') : empty('No products yet', 'Add products to your menu to set daily quantities.');
+}
+function updateInventoryProducts() {
+  $('#quantity-products').innerHTML = inventoryProducts();
+  $('#quantity-save-summary').textContent = inventorySaveSummary();
 }
 function promoStatus(promo, now = Date.now()) {
   const expires = Date.parse(promo.expires_at);
@@ -491,17 +508,7 @@ function stable(value) {
   if (value && typeof value === 'object') return JSON.stringify(Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined && v !== null && v !== '').sort(([a], [b]) => a.localeCompare(b)).map(([key, val]) => [key, JSON.parse(stable(val))])));
   return JSON.stringify(value ?? null);
 }
-function dateRange(from, through) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(through) || from > through) throw new Error('Choose a valid date range. The end date must be on or after the start date.');
-  const dates = [];
-  const current = new Date(`${from}T12:00:00Z`);
-  const end = new Date(`${through}T12:00:00Z`);
-  for (; current <= end; current.setUTCDate(current.getUTCDate() + 1)) {
-    dates.push(current.toISOString().slice(0, 10));
-    if (dates.length > 180) throw new Error('Set up to 180 dates at a time.');
-  }
-  return dates;
-}
+
 function validDateList(value, title) {
   const dates = [...new Set(list(value))];
   if (dates.some(date => !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(`${date}T12:00:00Z`).getTime()) || new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date)) throw new Error(`${title}: a selected date is invalid. Reload shop settings and select the date again.`);
@@ -528,6 +535,8 @@ async function onAction(button) {
   const id = button.dataset.id;
   const index = Number(button.dataset.index);
   switch (action) {
+    case 'unlimit-quantity': state.inventoryDrafts[id] = ''; updateInventoryProducts(); $(`[data-quantity-id="${CSS.escape(id)}"]`)?.focus(); break;
+    case 'reset-quantities': state.inventoryDrafts = {}; updateInventoryProducts(); break;
     case 'close-dialog': closeDialog(); break;
     case 'refresh': await Promise.all([refresh(), visitorPoller.refresh()]); toast('Dashboard refreshed.'); break;
     case 'upcoming': state.filters.upcoming = true; state.view = 'orders'; render(); break;
@@ -618,6 +627,13 @@ document.addEventListener('click', async event => {
 });
 document.addEventListener('input', event => {
   const target = event.target;
+  if (target.hasAttribute('data-quantity-id')) {
+    const id = target.dataset.quantityId;
+    state.inventoryDrafts[id] = target.value;
+    target.placeholder = 'No limit';
+    $('[data-quantity-status]', target.closest('[data-quantity-product]')).textContent = quantityStatus(quantitySelection(id, state.inventoryDates, state.inventory, state.inventoryDrafts), state.inventoryDates);
+    $('#quantity-save-summary').textContent = inventorySaveSummary();
+  }
   if (target.closest('[data-form="order-edit"]')) $('#edit-save-notice').innerHTML = '';
   if (target.dataset.productFilter === 'search') {
     state.productFilters.search = target.value;
@@ -667,7 +683,7 @@ document.addEventListener('change', async event => {
       render(); $('#analytics-period')?.focus();
       return;
     }
-    if (target.id === 'inventory-date') { state.inventoryDate = target.value; render(); }
+    if (target.name === 'inventory_dates') { state.inventoryDates = calendarDates(target.value); updateInventoryProducts(); }
     if (target.id === 'promo-kind') {
       target.form.elements.namedItem('cap').disabled = target.value !== 'percent';
       const value = $('#promo-value');
@@ -768,9 +784,16 @@ async function submitForm(form) {
       closeDialog(); await refresh(); toast('Delivery zone saved.'); break;
     }
     case 'inventory': {
-      const dates = dateRange(fieldValue(form, 'start_date'), fieldValue(form, 'end_date'));
-      const rows = dates.map(date => ({ product_id: fieldValue(form, 'product_id'), date, capacity: Number(fieldValue(form, 'capacity')), available: fieldValue(form, 'available') === 'yes' }));
-      await api('save_inventory', { rows }); state.inventoryDate = dates[0]; await refresh(); toast(`${dates.length} daily allocation${dates.length === 1 ? '' : 's'} saved.`); break;
+      const rows = quantitySaveRows(state.products, state.inventory, state.inventoryDates, state.inventoryDrafts, manilaDate());
+      if (!rows.length) { state.inventoryDrafts = {}; updateInventoryProducts(); toast('Quantities are already up to date.'); break; }
+      const controls = [...$$('input, button, textarea', form), ...$$('[data-view]')].filter(control => !control.disabled);
+      controls.forEach(control => { control.disabled = true; });
+      try {
+        state.inventory = await api('save_inventory', { rows });
+        state.inventoryDrafts = {};
+        render(); toast(`Quantities saved for ${state.inventoryDates.length} selected date${state.inventoryDates.length === 1 ? '' : 's'}.`);
+      } finally { controls.forEach(control => { control.disabled = false; }); }
+      break;
     }
     case 'settings': {
       const settings = { ...state.settings };

@@ -35,6 +35,10 @@ Run `npm run test:order-slips` for Print summary and multi-order selection, 5-in
 Run `npm run test:checkout` for phone-format checks and the isolated checkout browser test. The browser test uses local fixtures and blocks external requests. It covers buyer/recipient phone validation, enabling social usernames only after platform selection, and preserving pickup line breaks on checkout and saved orders. The same Playwright and browser environment overrides above apply.
 
 
+## Daily quantities
+
+Run `npm run test:daily-quantities` for the calendar with all product quantities, blank/unlimited and mixed limits, saving across dates, clearing limits, staff access, failed-save retries, keyboard selection and phone layout. The browser test uses local fixtures and blocks all external requests. `QUANTITY_TEST_OUTPUT` sets its screenshot/results directory. Backend stock guarantees are covered by `npm run test:backend`.
+
 ## Customer booking calendar
 
 Run `npm run test:customer-calendar` for the date/model checks and isolated popup

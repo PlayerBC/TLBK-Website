@@ -6,7 +6,7 @@
   "description": "Existing TLB Kitchen website with additive manual-payment ordering draft",
   "scripts": {
     "dev": "python -m http.server 4173 --bind 127.0.0.1",
-    "test": "node --test tests/shop-rules.test.mjs tests/product-labels.test.mjs tests/checkout-fields.test.mjs tests/order-edit-save.test.mjs tests/order-edit-confirmation.test.mjs tests/refund-status.test.mjs tests/date-calendar.test.mjs tests/customer-calendar.test.mjs tests/analytics.test.mjs tests/analytics-view.test.mjs tests/traffic.test.mjs tests/website-visitors.test.mjs && node tests/backend/run.mjs && node tests/edge/run.mjs",
+    "test": "node --test tests/daily-quantities.test.mjs tests/shop-rules.test.mjs tests/product-labels.test.mjs tests/checkout-fields.test.mjs tests/order-edit-save.test.mjs tests/order-edit-confirmation.test.mjs tests/refund-status.test.mjs tests/date-calendar.test.mjs tests/customer-calendar.test.mjs tests/analytics.test.mjs tests/analytics-view.test.mjs tests/traffic.test.mjs tests/website-visitors.test.mjs && node tests/backend/run.mjs && node tests/edge/run.mjs",
     "test:shop": "node --test tests/shop-rules.test.mjs",
     "test:backend": "node tests/backend/run.mjs",
     "test:newsletter": "node --experimental-transform-types --test tests/edge/newsletter.test.mjs && node tests/newsletter-ui.mjs",
@@ -14,6 +14,7 @@
     "test:labels": "node --test tests/product-labels.test.mjs && node tests/ui/product-labels.mjs",
     "test:product-photos": "node tests/ui/product-photos.mjs",
     "test:order-slips": "node tests/ui/order-slips.mjs",
+    "test:daily-quantities": "node --test tests/daily-quantities.test.mjs tests/shop-rules.test.mjs tests/date-calendar.test.mjs && node tests/ui/daily-quantities.mjs",
     "test:checkout": "node --test tests/checkout-fields.test.mjs && node tests/ui/checkout-feedback.mjs",
     "test:delivery-admin": "node --test tests/date-calendar.test.mjs && node tests/ui/delivery-admin.mjs",
     "test:customer-calendar": "node --test tests/customer-calendar.test.mjs && node tests/ui/customer-calendar.mjs",
@@ -21,4 +22,3 @@
     "test:traffic": "node --test tests/traffic.test.mjs"
   }
 }
-

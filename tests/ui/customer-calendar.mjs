@@ -3,7 +3,7 @@
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
-import { join, extname, resolve } from 'node:path';
+import { join, extname, resolve, sep } from 'node:path';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
 
@@ -53,7 +53,7 @@ const server = createServer(async (req, res) => {
     const name = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     if (name === '/assets/ordering/client.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); res.end(mockClient); return; }
     const path = resolve(root, '.' + (name === '/' ? '/shop.html' : name));
-    if (!path.startsWith(root + '/')) throw new Error('Invalid path');
+    if (!path.startsWith(root + sep)) throw new Error('Invalid path');
     const data = await readFile(path);
     res.writeHead(200, { 'Content-Type': mime[extname(path)] || 'application/octet-stream' }); res.end(data);
   } catch { res.writeHead(404); res.end('Not found'); }

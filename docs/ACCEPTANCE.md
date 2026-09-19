@@ -98,7 +98,7 @@ Run the Monday example on an actual Monday in the preview or through an explicit
 | D07 | Submit before cutoff, upload proof, approve on a later day. | Lead-time eligibility remains anchored to order creation. Approval does not move the fulfillment date or restart production counting. | __________________ |
 | D08 | With A capacity 10 on D and E, order three A boxes for D. Inspect capacity. | D remaining=7; E remaining=10. Inner flavor counts do not affect inventory. | __________________ |
 | D09 | Add two pickup A boxes and two delivery A boxes for D. | Both methods draw from the same D capacity; no independent pickup/delivery pool or order-count limit exists. | __________________ |
-| D10 | Configure no capacity row for A on another date, then configure capacity zero on another date. | Both dates are unavailable for A; missing capacity never means unlimited. | __________________ |
+| D10 | Leave A blank on one date, then set its quantity to zero on another date. | Blank/missing capacity is unlimited, subject to product and date rules. Zero is unavailable. Existing saved numeric limits remain enforced. | __________________ |
 | D11 | Mark A unavailable on D after an order exists; block D globally afterward. | New selections are blocked. Existing order, reservation, valid payment access, and history remain unchanged. | __________________ |
 | D12 | Attempt to lower D capacity below its current held plus committed units. | Capacity edit is rejected with a useful explanation; existing orders are not removed or silently changed. | __________________ |
 | D13 | Pause new orders while a valid awaiting-payment order exists. Visit existing order link and submit valid proof before deadline. | New orders are blocked; existing order access, payment instructions, and valid proof submission work. Main website stays online. | __________________ |
@@ -318,3 +318,12 @@ Review the merge and deployment walkthrough in [SETUP.md](SETUP.md). A completed
 - [ ] Completed orders count only qualifying paid orders currently marked Completed. The selected period uses placement date, and repeat customers need two qualifying orders inside that period.
 - [ ] Promo uses count paid, non-cancelled, non-refunded orders with a saved code and positive discount once per order. Distinct code count and per-code orders/discount totals agree, including deleted or inactive saved codes.
 - [ ] No-order periods show zero customer/completion/promo counts and an empty promo explanation. Desktop and mobile layouts remain readable.
+
+## Daily quantity calendar
+
+- Select one or several nonconsecutive dates, including dates in another month. All products show their first photo/name and an optional total field; new dates start blank (unlimited).
+- Reopen a date with a saved limit; its quantity and already-ordered/remaining counts appear. Clear it and save to remove the limit. Enter 0 on an empty date to block stock.
+- Select dates with different saved limits: Mixed appears. Save an edit to another product and verify those mixed limits remain unchanged. Enter one total for the mixed product and verify that total applies to each selected date.
+- A total below existing allocations is rejected, including allocations created after loading the page. A failed batch saves none of its rows. Existing orders remain intact.
+- Both owner and staff can save quantities. Customers cannot call the inventory action. Shop closure, product activity, lead time, cutoff and booking-window rules still apply to unlimited dates.
+- Check phone layout and keyboard date selection; edits survive calendar navigation, failed saves and retries.

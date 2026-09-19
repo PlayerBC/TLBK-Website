@@ -62,9 +62,9 @@ export function deliveryZone(zones,locality,method){
 export function sameDayBasketEligible(items,products,inventory,method='pickup',now=new Date()){
   const eligible=p=>p?.active&&allowsSameDay(p)&&!(method==='delivery'&&p.pickup_only===true);
   if(items.length)return items.every(line=>eligible(products.find(p=>p.id===line.product_id)));
-  // With an empty basket, let customers browse today's stocked same-day menu.
+  // With an empty basket, eligible products are unlimited unless a cap is saved.
   const today=dateInManila(now);
-  return products.some(p=>eligible(p)&&inventory.some(row=>row.product_id===p.id&&row.date===today&&row.available&&Number(row.remaining??(row.capacity-Number(row.reserved||0)))>=Number(p.min_quantity||1)));
+  return products.some(p=>{if(!eligible(p))return false;const row=inventory.find(row=>row.product_id===p.id&&row.date===today);return row?.available!==false&&(row?.capacity==null||Number(row.remaining??(row.capacity-Number(row.reserved||0)))>=Number(p.min_quantity||1))});
 }
 export function availability(product,date,settings,inventory,now=new Date(),method='pickup'){
   const earliest=earliestLeadDate(product,settings,now);
@@ -75,8 +75,9 @@ export function availability(product,date,settings,inventory,now=new Date(),meth
   if(dateIssue)return {available:false,reason:dateIssue,earliest};
   if(!earliest||date<earliest)return {available:false,reason:earliest?`Needs more preparation time. Earliest ${earliest}.`:'No production dates configured.',earliest};
   const row=inventory.find(r=>r.product_id===product.id&&r.date===date);
-  const remaining=row?Number(row.remaining??(row.capacity-Number(row.reserved||0))):0;
-  if(!row||!row.available)return {available:false,reason:'Not available on this date',earliest};
+  if(row?.available===false)return {available:false,reason:'Not available on this date',earliest};
+  if(row?.capacity==null)return {available:true,unlimited:true,remaining:Infinity,reason:'Available on this date',earliest};
+  const remaining=Number(row.remaining??(row.capacity-Number(row.reserved||0)));
   return {available:remaining>=Number(product.min_quantity||1),remaining,reason:remaining>0?`${remaining} available on this date`:'Sold out for this date',earliest};
 }
 export function selectionPrice(product,selections){

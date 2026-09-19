@@ -3,7 +3,7 @@
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
-import { join, extname, resolve } from 'node:path';
+import { join, extname, resolve, sep } from 'node:path';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
 import { dateInManila } from '../../assets/ordering/shop-rules.js';
@@ -49,6 +49,7 @@ export async function api(action, payload = {}) {
   return structuredClone(data);
 }
 export async function upload() { throw new Error('Uploads are disabled in this isolated test.'); }
+export async function websiteVisitorStats() { return {}; }
 ${helpers}`;
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 const server = createServer(async (req, res) => {
@@ -56,9 +57,10 @@ const server = createServer(async (req, res) => {
     const name = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     if (name === '/assets/ordering/client.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); res.end(mockClient); return; }
     const path = resolve(root, '.' + (name === '/' ? '/manage.html' : name));
-    if (!path.startsWith(root + '/')) throw new Error('Invalid path');
+    if (!path.startsWith(root + sep)) throw new Error('Invalid path');
+    const data = await readFile(path);
     res.writeHead(200, { 'Content-Type': mime[extname(path)] || 'application/octet-stream' });
-    res.end(await readFile(path));
+    res.end(data);
   } catch { res.writeHead(404); res.end('Not found'); }
 }).listen(0, '127.0.0.1');
 await once(server, 'listening');

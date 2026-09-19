@@ -43,7 +43,7 @@ export default async function ({ db, check, state }) {
     assert.equal(await remaining(product, date), 1);
     await assert.rejects(api('create_order', checkout(product, date, { items: [item(product, 2)] })), /stock|capacity|available|remain/i);
     assert.equal(await remaining(product, date), 1);
-    await assert.rejects(api('quote', checkout(product, await h.day(31))), /stock|capacity|available|date/i);
+    assert.equal((await api('quote', checkout(product, await h.day(31)))).total_cents, 10000);
   })();
 
   await check('a price change after review rejects the stale quote atomically without creating an order or allocation', async () => {

@@ -1,5 +1,5 @@
 import { calendarKeyDate, calendarMonthDays, isCalendarDate, shiftCalendarMonth } from './date-calendar.js';
-import { customerBookingWindow, customerDateIssue, sameDayOpen } from './shop-rules.js?v=production-cutoff-1';
+import { customerBookingWindow, customerDateIssue, sameDayOpen } from './shop-rules.js?v=daily-quantities-1';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

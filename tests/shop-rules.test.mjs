@@ -9,17 +9,17 @@ test('Monday placement and a full Tuesday production day means Wednesday',()=>as
 test('nonproduction date is skipped; fulfillment closure alone does not remove production day',()=>{assert.equal(earliestLeadDate(product,{...settings,nonproduction_dates:['2026-09-15']},monday),'2026-09-17');assert.equal(earliestLeadDate(product,{...settings,blocked_dates:['2026-09-15']},monday),'2026-09-16')});
 test('configured cutoff counts today only before the boundary',()=>{assert.equal(earliestLeadDate(product,{...settings,cutoff_time:'10:00'},monday),'2026-09-16');assert.equal(earliestLeadDate(product,{...settings,cutoff_time:'10:01'},monday),'2026-09-15')});
 for(const scenario of leadTimeCases)test(scenario.name,()=>assert.equal(earliestLeadDate({...product,lead_days:scenario.days},{...settings,cutoff_time:'12:00',...scenario.settings},new Date(scenario.at)),scenario.expected));
-test('earlier lead date still requires fulfillment availability and dated stock',()=>{
+test('earlier lead date still requires fulfillment availability and honors saved limits',()=>{
   const cake={...product,lead_days:2},schedule={...settings,cutoff_time:'12:00'},now=new Date('2026-09-19T09:00:00+08:00');
   const stock=[{product_id:product.id,date:'2026-09-21',capacity:5,available:true}];
   assert.equal(availability(cake,'2026-09-20',schedule,stock,now).available,false);
   assert.equal(availability(cake,'2026-09-21',schedule,stock,now).available,true);
-  assert.equal(availability(cake,'2026-09-21',schedule,[],now).available,false);
+  assert.equal(availability(cake,'2026-09-21',schedule,[],now).available,true);
   assert.equal(availability(cake,'2026-09-21',{...schedule,pickup_blocked_dates:['2026-09-21']},stock,now).available,false);
 });
 test('Manila calendar rollover does not use the server local timezone',()=>assert.equal(dateInManila('2026-09-14T16:00:00Z'),'2026-09-15'));
 test('four classic and two Matcha add PHP60 to one box, selection count is exact',()=>{assert.equal(selectionPrice(product,{mix:{classic:4,matcha:2}}),66000);assert.throws(()=>selectionPrice(product,{mix:{classic:4,matcha:1}}),/exactly 6/);assert.throws(()=>selectionPrice(product,{mix:{classic:3.5,matcha:2.5}}),/whole/)});
-test('missing date capacity is unavailable and soldout day does not affect another day',()=>{const inventory=[{product_id:'cookie',date:'2026-09-16',capacity:10,reserved:10,available:true},{product_id:'cookie',date:'2026-09-17',capacity:10,reserved:3,available:true}];assert.equal(availability(product,'2026-09-16',settings,inventory,monday).available,false);assert.equal(availability(product,'2026-09-17',settings,inventory,monday).remaining,7);assert.equal(availability(product,'2026-09-18',settings,inventory,monday).available,false)});
+test('missing date capacity is unlimited and soldout day does not affect another day',()=>{const inventory=[{product_id:'cookie',date:'2026-09-16',capacity:10,reserved:10,available:true},{product_id:'cookie',date:'2026-09-17',capacity:10,reserved:3,available:true}];assert.equal(availability(product,'2026-09-16',settings,inventory,monday).available,false);assert.equal(availability(product,'2026-09-17',settings,inventory,monday).remaining,7);assert.equal(availability(product,'2026-09-18',settings,inventory,monday).available,true)});
 test('delivery closure leaves pickup and adjacent dates available without changing production lead time',()=>{
   const closed={...settings,delivery_blocked_dates:['2026-09-16']};
   const stock=[{product_id:'cookie',date:'2026-09-16',capacity:10,available:true}];
@@ -79,18 +79,18 @@ test('same-day eligibility does not bypass stock, closed dates, pickup-only or p
   const nori={...product,name:'Nori',lead_days:0,allow_same_day:true};
   const rows=[{product_id:product.id,date:'2026-09-14',capacity:10,available:true}];
   assert.equal(availability(nori,'2026-09-14',settings,rows,monday).available,true);
-  assert.equal(availability(nori,'2026-09-14',settings,[],monday).available,false);
+  assert.equal(availability(nori,'2026-09-14',settings,[],monday).available,true);
   assert.equal(availability(nori,'2026-09-14',{...settings,blocked_dates:['2026-09-14']},rows,monday).available,false);
   assert.equal(availability(nori,'2026-09-14',{...settings,delivery_blocked_dates:['2026-09-14']},rows,monday,'delivery').available,false);
   assert.equal(availability({...nori,pickup_only:true},'2026-09-14',settings,rows,monday,'delivery').available,false);
   assert.equal(availability(nori,'2026-09-13',settings,rows,monday).available,false);
 });
-test('empty baskets need a stocked eligible product to show today, and mixed baskets never qualify',()=>{
+test('empty baskets need an available eligible product to show today, and mixed baskets never qualify',()=>{
   const nori={...product,id:'nori',lead_days:0,allow_same_day:true};
   const cake={...product,id:'cake',lead_days:0,allow_same_day:false};
   const rows=[{product_id:'nori',date:'2026-09-14',capacity:10,available:true}];
   assert.equal(sameDayBasketEligible([],[nori,cake],rows,'pickup',monday),true);
-  assert.equal(sameDayBasketEligible([],[nori,cake],[],'pickup',monday),false);
+  assert.equal(sameDayBasketEligible([],[nori,cake],[],'pickup',monday),true);
   assert.equal(sameDayBasketEligible([],[{...nori,pickup_only:true}],rows,'delivery',monday),false);
   assert.equal(sameDayBasketEligible([{product_id:'nori'}],[nori,cake],rows,'pickup',monday),true);
   assert.equal(sameDayBasketEligible([{product_id:'nori'},{product_id:'cake'}],[nori,cake],rows,'pickup',monday),false);

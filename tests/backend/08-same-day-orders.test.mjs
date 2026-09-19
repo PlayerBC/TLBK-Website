@@ -163,7 +163,7 @@ export default async function ({ db, check, state }) {
       await assert.rejects(api('quote', pickup), /Product unavailable/);
       await saveProduct(product);
       await inventory(product, today, 5, false);
-      await assert.rejects(api('quote', pickup), /No available quantity/);
+      await assert.rejects(api('quote', pickup), /unavailable/);
       await inventory(product, today, 1);
       await assert.rejects(api('create_order', pickup), /Only 1 units/);
     })();
