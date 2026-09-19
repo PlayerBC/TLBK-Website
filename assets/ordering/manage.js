@@ -4,6 +4,7 @@ import { confirmOrderTotalChange } from './order-edit-confirmation.js?v=custom-c
 import { socialContactMessage } from './checkout-fields.js?v=social-contact-1';
 import { fulfillmentStatus, matchesFulfillmentStatus, isActiveFulfillment, needsPaymentReview } from './refund-status.js?v=cancelled-review-1';
 import { renderProductPhotos, bindProductPhotoOrder } from './product-photos.js?v=photo-order-1';
+import { printOrderSlips } from './order-slips.js?v=order-slips-1';
 import { productLabelSettings, labelTextColor, MAX_LABEL_LENGTH } from './product-label.js';
 import { dateCalendar, bindDateCalendars } from './date-calendar.js';
 import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-metrics-1';
@@ -551,7 +552,7 @@ async function onAction(button) {
     case 'change-edit-options': captureEdit(); { const item = editDraft.items[index]; const product = state.products.find(p => p.id === item.product_id); item.preserve_configuration = false; item.selections = newSelections(product); } renderEditOrder(); break;
     case 'add-edit-item': captureEdit(); { const product = state.products.find(p => p.active) || state.products[0]; editDraft.items.push({ product_id: product.id, quantity: product.min_quantity || 1, selections: newSelections(product) }); } renderEditOrder(); break;
     case 'remove-edit-item': captureEdit(); editDraft.items.splice(index, 1); renderEditOrder(); break;
-    case 'print-order': window.print(); break;
+    case 'print-order': await printOrderSlips(activeOrder, { products: state.products, settings: state.settings }); break;
     case 'export-orders': exportOrders(); break;
   }
 }

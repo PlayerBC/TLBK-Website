@@ -1,0 +1,60 @@
+:root{--order-slip-layout:ready;color-scheme:light;font-family:Arial,sans-serif;color:#25221e;background:#eee9e2}
+*{box-sizing:border-box}
+body{margin:0}
+.print-toolbar{position:sticky;top:0;z-index:2;padding:16px 24px;background:#fff;border-bottom:1px solid #cfc7bc;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}
+.print-toolbar p{margin:0;flex:1;min-width:220px;line-height:1.5}
+.print-toolbar button{padding:10px 18px;border:1px solid #745032;border-radius:6px;background:#745032;color:white;font:inherit;cursor:pointer}
+.print-toolbar button:disabled{opacity:.5;cursor:wait}
+.print-toolbar button:focus-visible{outline:3px solid #25221e;outline-offset:3px}
+.print-toolbar .close-preview{background:white;color:#745032}
+#slips{padding:20px 12px;display:grid;justify-content:center;gap:20px}
+.slip{width:148mm;height:105mm;padding:4mm 5mm;background:#fff;display:flex;flex-direction:column;font-size:8.1pt;line-height:1.27;box-shadow:0 2px 12px #0002;overflow-wrap:anywhere}
+.slip p,.slip h1,.slip h2,.slip h3{margin:0}
+.slip-header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1mm 3mm;padding-bottom:2.4mm;border-bottom:.25mm solid #cfc7bc;flex-shrink:0}
+.slip-brand{font-size:8.4pt;font-weight:bold;color:#745032}
+.slip-reference{font-size:10.8pt;line-height:1.1;font-weight:bold}
+.slip-method{grid-column:2;grid-row:1 / 3;align-self:start;padding:2.2mm 4mm;border-radius:2mm;background:#f3eee7;color:#745032;font-size:9pt;font-weight:bold}
+.slip-date{font-size:8pt}
+.slip-state{grid-column:2;font-size:7pt;font-weight:bold;text-align:right;max-width:42mm}
+.slip-body{display:grid;grid-template-columns:minmax(0,80fr) minmax(0,52fr);gap:3mm;flex:1;min-height:0;padding-top:2.5mm}
+.slip-left,.slip-right{min-width:0;min-height:0}
+.slip-right{border-left:.25mm solid #cfc7bc;padding-left:3mm;display:flex;flex-direction:column}
+.slip-heading{font-size:6.9pt;line-height:1.3;color:#625c55;font-weight:bold;text-transform:uppercase;margin-bottom:1.6mm!important}
+.slip-items{display:flex;flex-direction:column;gap:1mm}
+.slip-item{display:grid;grid-template-columns:15mm minmax(0,1fr);gap:2mm;min-height:16mm;padding-bottom:1mm;border-bottom:.2mm solid #cfc7bc;break-inside:avoid}
+.slip-photo{width:15mm;height:15mm;border:.2mm solid #cfc7bc;display:flex;align-items:center;justify-content:center;font-size:6.5pt;color:#625c55;text-align:center}
+.slip-photo img{display:block;width:100%;height:100%;object-fit:contain}
+.slip-item-copy{display:flex;flex-direction:column;gap:1mm;min-width:0}
+.slip-item-title{font-size:8.8pt;line-height:1.15;font-weight:bold}
+.slip-quantity{color:#745032;margin-right:1.6mm;font-size:10pt}
+.slip-variation{color:#625c55;white-space:pre-wrap;font-size:8pt}
+.slip-price{display:flex;justify-content:space-between;gap:2mm;flex-wrap:wrap;margin-top:auto!important;font-size:7.5pt;color:#625c55}
+.slip-price strong{font-size:8.5pt;color:#25221e}
+.slip-payment{margin-top:2mm;break-inside:avoid}
+.slip-payment dl{margin:0}
+.slip-payment dl>div{display:flex;justify-content:space-between;align-items:start;gap:3mm;margin-top:1.1mm}
+.slip-payment dt{color:#625c55}
+.slip-payment dd{margin:0;text-align:right;white-space:nowrap}
+.slip-payment .slip-total{border-top:.25mm solid #cfc7bc;margin-top:1.5mm;padding-top:1.4mm;font-weight:bold}
+.slip-total dt{color:#25221e}
+.slip-total dd{font-size:10.8pt}
+.slip-buyer{padding-bottom:2mm;border-bottom:.2mm solid #cfc7bc;margin-bottom:2mm}
+.slip-buyer-name{font-size:10pt;font-weight:bold;margin-bottom:1mm!important}
+.slip-buyer-phone{font-size:8.8pt}
+.slip-buyer-social{font-size:8pt;color:#625c55;margin-top:1.5mm!important}
+.slip-details{flex:1;min-height:0}
+.slip-detail{padding-bottom:2mm;margin-bottom:2mm;border-bottom:.2mm solid #cfc7bc;break-inside:avoid}
+.slip-detail p{white-space:pre-wrap;line-height:1.35}
+.slip-signoff{font-size:6.6pt;color:#625c55;padding-top:1.4mm;white-space:nowrap}
+.slip-footer{display:flex;justify-content:space-between;gap:3mm;padding-top:2mm;flex-shrink:0;font-size:6pt;font-weight:bold;color:#745032}
+.slip-continuation{font-size:7pt;font-weight:bold;color:#745032}
+.slip-empty{color:#625c55}
+@media screen{.slip{zoom:var(--preview-scale,1)}}
+@page{size:148mm 105mm;margin:0}
+@media print{
+  :root,body{background:white}
+  .print-toolbar{display:none!important}
+  #slips{display:block;padding:0}
+  .slip{box-shadow:none;margin:0;break-after:page;break-inside:avoid;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .slip:last-child{break-after:auto}
+}

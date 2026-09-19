@@ -26,6 +26,10 @@ Run `npm run test:labels` to check optional labels, saved text and color, and th
 
 Run `npm run test:product-photos` for native mouse and touch dragging, keyboard movement, save/reopen behavior, unsaved field preservation, upload/remove interactions, cancellation and staff access. The test uses local API/image fixtures and blocks every external request. `PHOTO_TEST_OUTPUT` selects its screenshot/results directory; it defaults to `tests/artifacts/product-photos`. The Playwright and Chromium environment overrides above apply.
 
+## Order preparation slips
+
+Run `npm run test:order-slips` for the dashboard Print summary flow, A6 landscape pagination, saved prices/options, delivery/pickup details, private-field exclusion, long text, photo loading/fallbacks, mobile preview, and print retries. The fixture blocks external requests and performs no live mutations. `PRINT_TEST_OUTPUT` selects the screenshot/PDF/results directory (default `tests/artifacts/order-slips`). `PRINT_TEST_IMAGE_DIR` optionally supplies `nori.webp` and `ube-cake.jpg` for visual review; otherwise generated local test images are used. The Playwright and Chromium environment overrides above apply. Generated PDFs should be checked at 148 × 105 mm, with no extra blank pages.
+
 ## Checkout feedback regression
 
 Run `npm run test:checkout` for phone-format checks and the isolated checkout browser test. The browser test uses local fixtures and blocks external requests. It covers buyer/recipient phone validation, enabling social usernames only after platform selection, and preserving pickup line breaks on checkout and saved orders. The same Playwright and browser environment overrides above apply.

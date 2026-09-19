@@ -13,6 +13,7 @@
     "build": "node scripts/build-static.mjs",
     "test:labels": "node --test tests/product-labels.test.mjs && node tests/ui/product-labels.mjs",
     "test:product-photos": "node tests/ui/product-photos.mjs",
+    "test:order-slips": "node tests/ui/order-slips.mjs",
     "test:checkout": "node --test tests/checkout-fields.test.mjs && node tests/ui/checkout-feedback.mjs",
     "test:delivery-admin": "node --test tests/date-calendar.test.mjs && node tests/ui/delivery-admin.mjs",
     "test:customer-calendar": "node --test tests/customer-calendar.test.mjs && node tests/ui/customer-calendar.mjs",
