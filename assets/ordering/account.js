@@ -1,6 +1,6 @@
 import { api, auth, authLink, ready, configured, initializationError, escapeHtml as esc, money, formatDate, toast } from './client.js';
 import { newsletterRequest } from './newsletter-client.js';
-import { mountNewsletterPreferences } from './newsletter.js';
+import { mountNewsletterPreferences } from './newsletter.js?v=welcome-1';
 
 const root = document.getElementById('account-root');
 const page = document.body.dataset.accountPage;
@@ -75,7 +75,7 @@ function accountForm() {
     <form id="auth-form"><fieldset ${disabled ? 'disabled' : ''} style="border:0;padding:0;margin:0">
       <label class="field">Email address<input name="email" type="email" autocomplete="email" maxlength="254" required value="${esc(email)}" placeholder="you@example.com"></label>
       ${['signin', 'signup'].includes(mode) ? `<label class="field">Password<input name="password" type="password" autocomplete="${mode === 'signup' ? 'new-password' : 'current-password'}" ${mode === 'signup' ? 'minlength="10"' : ''} maxlength="128" required ${mode === 'signup' ? 'aria-describedby="password-hint"' : ''}></label>${mode === 'signup' ? '<p class="muted" id="password-hint">Use at least 10 characters. A memorable phrase works well.</p><label class="field">Confirm password<input name="confirm_password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>' : ''}` : ''}
-      ${mode === 'signup' ? `<label class="newsletter-check"><input type="checkbox" name="newsletter" ${newsletterChoice ? 'checked' : ''}><span>Subscribe to TLB’s newsletter <small>Optional. Occasional emails about new treats, seasonal menus, and special offers. Confirm separately by email. Unsubscribe anytime.</small></span></label><div class="newsletter-trap" aria-hidden="true"><label>Leave this field empty<input name="website" tabindex="-1" autocomplete="off"></label></div>` : ''}
+      ${mode === 'signup' ? `<label class="newsletter-check"><input type="checkbox" name="newsletter" ${newsletterChoice ? 'checked' : ''}><span>Subscribe to TLB’s newsletter <small>Optional. Occasional emails about new treats, seasonal menus, and special offers. Subscribe immediately. Unsubscribe anytime.</small></span></label><div class="newsletter-trap" aria-hidden="true"><label>Leave this field empty<input name="website" tabindex="-1" autocomplete="off"></label></div>` : ''}
       <button class="button" type="submit">${buttons[mode]}</button>
     </fieldset></form>
     <div class="dialog-actions"><button class="button button-quiet" type="button" data-mode="recover">Forgot password?</button><button class="button button-quiet" type="button" data-mode="resend">Resend verification</button></div>
@@ -151,7 +151,7 @@ function signupNewsletterNotice(failed) {
   node.hidden = false;
   const extra = document.createElement('p');
   extra.style.marginTop = '12px';
-  extra.textContent = failed ? 'Your account request is complete, but we could not request your newsletter confirmation. Retry below; you do not need to create your account again.' : 'We also requested a separate newsletter confirmation email. Confirm that subscription to receive news and special offers.';
+  extra.textContent = failed ? 'Your account request is complete, but we could not complete your newsletter signup. Retry below; you do not need to create your account again.' : 'You’re also subscribed to the TLB newsletter! Look out for your welcome email.';
   node.append(extra);
   if (!failed) return;
   const button = document.createElement('button');
@@ -160,9 +160,9 @@ function signupNewsletterNotice(failed) {
     button.disabled = true;
     try {
       await newsletterRequest('subscribe', { email, source: 'account_signup', website: '' });
-      extra.textContent = 'Check your inbox and spam folder for the separate newsletter confirmation email.';
+      extra.textContent = 'You’re subscribed to the TLB newsletter! Look out for your welcome email.';
       button.remove();
-    } catch { extra.textContent = 'We still could not request your newsletter confirmation. Please try again shortly. Your account request is complete.'; button.disabled = false; }
+    } catch { extra.textContent = 'We still could not complete your newsletter signup. Please try again shortly. Your account request is complete.'; button.disabled = false; }
   };
   node.append(button);
 }

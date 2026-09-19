@@ -31,7 +31,7 @@ export default async function ({ db, check, state }) {
     const tables = (await db.query("select relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='tlb' and c.relname in ('newsletter_config','newsletter_subscribers','newsletter_events','newsletter_popup_seen')")).rows;
     assert.equal(tables.length, 4);
     assert.ok(tables.every(row => row.relrowsecurity));
-    assert.equal((await call('configuration')).consent_version, 'tlb-newsletter-v1');
+    assert.equal((await call('configuration')).consent_version, 'tlb-newsletter-v2-single-opt-in');
   })();
 
   await check('newsletter requests normalize email, retain only token hashes, and enforce minute and rolling hourly limits', async () => {

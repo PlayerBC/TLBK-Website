@@ -57,7 +57,7 @@ try {
         if (body.action === 'popup_seen') claims.add(user?.id);
         if (body.action === 'subscribe') {
           if (state.failSubscribe) return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Please try again shortly.'})});
-          state.status = 'pending';
+          state.status = 'subscribed'; response.status = state.status;
         }
         if (body.action === 'confirm') { state.status = 'subscribed'; response.status = state.status; }
         if (body.action === 'unsubscribe') { state.status = 'unsubscribed'; response.status = state.status; }
@@ -95,7 +95,7 @@ try {
   await f.page.locator('#newsletter-dialog').waitFor({state:'visible'});
   await f.page.locator('#newsletter-popup-email').fill('subscriber@example.test');
   await f.page.locator('#newsletter-dialog button[type=submit]').click();
-  await f.page.getByText('Confirmation requested',{exact:true}).waitFor();
+  await f.page.getByText('Subscribed',{exact:true}).waitFor();
   assert.deepEqual(f.state.calls.find(call => call.action === 'subscribe'),{action:'subscribe',email:'subscriber@example.test',source:'shop_popup',website:''});
   await f.page.evaluate(() => document.getElementById('product-dialog').showModal());
   await f.page.locator('#newsletter-dialog').waitFor({state:'detached'});
@@ -123,7 +123,7 @@ try {
   f = await fixture(); await f.page.goto(origin+'/index.html');
   await f.page.locator('#newsletter-home-email').fill('homepage@example.test');
   await f.page.locator('[data-newsletter-form] button[type=submit]').click();
-  await f.page.getByText('Confirmation requested',{exact:true}).waitFor();
+  await f.page.getByText('Subscribed',{exact:true}).waitFor();
   assert.deepEqual(f.state.calls,[{action:'subscribe',email:'homepage@example.test',source:'homepage',website:''}]); await f.context.close();
 
   const member = {id:'once-ever-account',email:'member@example.test',email_confirmed_at:'2026-01-01'};
@@ -158,7 +158,7 @@ try {
   await f.page.getByRole('button',{name:'Retry newsletter signup'}).waitFor();
   assert.equal(await f.page.evaluate(() => window.signupCalls),1);
   f.state.failSubscribe = false; await f.page.getByRole('button',{name:'Retry newsletter signup'}).click();
-  await f.page.getByText('Check your inbox and spam folder for the separate newsletter confirmation email.').waitFor();
+  await f.page.getByText('You’re subscribed to the TLB newsletter! Look out for your welcome email.').waitFor();
   assert.equal(await f.page.evaluate(() => window.signupCalls),1,'Newsletter retry never recreates account'); await f.context.close();
 
   f = await fixture({user:member,initial:'subscribed'}); await f.page.goto(origin+'/account.html');
@@ -166,8 +166,13 @@ try {
   await f.page.getByText('You’re unsubscribed from the TLB newsletter. Your order and payment emails are unchanged.').waitFor();
   assert.equal(f.state.status,'unsubscribed');
   await f.page.locator('#newsletter-preferences [name=newsletter]').check(); await f.page.getByRole('button',{name:'Save email preference'}).click();
-  await f.page.getByRole('button',{name:'Resend confirmation'}).waitFor(); assert.equal(f.state.status,'pending'); await f.context.close();
+  await f.page.getByText('You’re subscribed! Look out for a welcome email from TLB.').waitFor(); assert.equal(f.state.status,'subscribed');
+  assert.equal(await f.page.getByRole('button',{name:'Resend confirmation'}).count(),0); await f.page.reload();
+  await f.page.getByText('You’re subscribed to the TLB newsletter.',{exact:true}).waitFor(); await f.context.close();
+  f = await fixture({user:member,initial:'pending'}); await f.page.goto(origin+'/account.html');
+  await f.page.locator('#newsletter-preferences [name=newsletter]').check(); await f.page.getByRole('button',{name:'Save email preference'}).click();
+  await f.page.getByText('You’re subscribed! Look out for a welcome email from TLB.').waitFor(); assert.equal(f.state.status,'subscribed'); await f.context.close();
   assert.deepEqual(errors,[]); assert.deepEqual(forbidden,[]);
-  console.log('PASS: once-only popup on mobile and across devices; modal exclusion; demo/order suppression; explicit confirmation with private-token scrubbing; optional signup and independent retry; subscribe/unsubscribe preferences. No live emails.');
+  console.log('PASS: once-only popup on mobile and across devices; modal exclusion; demo/order suppression; immediate subscription, legacy links and private-token scrubbing; optional signup and independent retry; subscribe/unsubscribe preferences. No live emails.');
 } finally { await browser?.close(); await new Promise(resolveClose => server.close(resolveClose)); }
 

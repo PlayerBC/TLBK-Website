@@ -1,6 +1,6 @@
 import { credentials, endpoint, env, field, HttpError, json, readJson, verifiedUser } from "../_shared/server.ts";
 
-// Public capture and secret confirmation tokens; account actions validate Auth JWTs.
+// Public signup records consent immediately; account actions validate Auth JWTs.
 // The service credential and provider key never leave this function.
 async function service(action: string, payload: Record<string, unknown> = {}): Promise<any> {
   const { url, key } = credentials();
@@ -145,9 +145,10 @@ async function finishPreference(api: Provider, state: any, config: any, imported
     }
     throw error;
   }
+  const unsubscribeToken = confirming ? randomToken() : null;
   await service(confirming ? "finish_confirm" : "finish_unsubscribe", {
     email: state.email, operation_id: state.operation_id, import_terminal: imported,
-    ...(confirming ? { contact_id: contact.id, unsubscribe_token_hash: await digest(randomToken()) } : {}),
+    ...(confirming ? { contact_id: contact.id, unsubscribe_token: unsubscribeToken, unsubscribe_token_hash: await digest(unsubscribeToken!) } : {}),
   });
 }
 async function resumePreference(api: Provider, state: any, config: any) {
@@ -161,13 +162,38 @@ async function configuration(): Promise<any> {
   }
   return config;
 }
-const generic = { ok: true, message: "Check your inbox for a confirmation email. If it does not arrive, check spam or try again later." };
+async function activateSubscription(api: Provider, state: any, config: any) {
+  state.operation_kind = "confirm";
+  let contact = await api(`/contacts/${encodeURIComponent(state.email)}`);
+  if (state.already_subscribed) {
+    if (!await subscribed(api, contact, config.topic_id)) throw new HttpError(410, "You have unsubscribed since using this link. Sign up again to rejoin.");
+    return;
+  }
+  if (contact?.unsubscribed) {
+    await service("cancel_operation", { email: state.email, operation_id: state.operation_id });
+    throw new HttpError(409, "Your address is opted out of all TLB marketing emails. Use the preferences link in a previous newsletter or contact TLB to rejoin.");
+  }
+  if (!contact) {
+    contact = await api("/contacts", "POST", { email: state.email, segments: [{ id: config.segment_id }], topics: [{ id: config.topic_id, subscription: "opt_in" }] });
+    if (!contact?.id) throw new HttpError(503, "Subscription could not be saved. Please try again in a moment.");
+    await verifyPreference(api, contact.id, config.topic_id, "opt_in");
+    const unsubscribeToken = randomToken();
+    await service("finish_confirm", { email: state.email, operation_id: state.operation_id, contact_id: contact.id,
+      unsubscribe_token: unsubscribeToken, unsubscribe_token_hash: await digest(unsubscribeToken) });
+    return;
+  }
+  await api(`/contacts/${encodeURIComponent(contact.id)}/segments/${encodeURIComponent(config.segment_id)}`, "POST");
+  state.contact_id = contact.id;
+  const imported = await updatePreference(api, state, contact.id, config.topic_id, "opt_in");
+  await finishPreference(api, state, config, imported);
+}
+const success = { ok: true, status: "subscribed", message: "You’re subscribed! Look out for a welcome email from TLB." };
 
 Deno.serve(endpoint(async (request, headers) => {
   const body = await readJson(request);
   const action = field(body.action, "Action", 32, true);
   if (action === "subscribe") {
-    if (body.website) return json(generic, 200, headers);
+    if (body.website) return json(success, 200, headers);
     const email = field(body.email, "Email", 254, true).toLowerCase();
     if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
     const source = field(body.source, "Source", 40) || "website";
@@ -176,24 +202,28 @@ Deno.serve(endpoint(async (request, headers) => {
     const api = provider();
     const sender = env("NEWSLETTER_FROM") || env("EMAIL_FROM");
     if (!sender) throw new HttpError(503, "Newsletter email delivery is not configured yet.");
-    const confirmation = randomToken();
     // Hash the gateway address with a server-only salt; no raw IP is retained.
-    // Email and global limits also apply when a proxy address is unavailable/spoofed.
     const address = (request.headers.get("x-forwarded-for") || "unknown").split(",")[0].trim().slice(0, 128);
-    const state = await service("request", { email, source, token_hash: await digest(confirmation), ip_hash: await digest(`${credentials().key}:${address}`) });
-    if (state.send) {
-      // A sending-only key could deliver a link that can never add a contact.
-      // Check management permission after rate limiting, before sending that link.
-      const topic = await api(`/topics/${encodeURIComponent(config.topic_id)}`);
-      if (!topic || topic.default_subscription !== "opt_out") throw new HttpError(503, "Newsletter signup is not available yet. Please try again later.");
-      const link = `${config.site_url.replace(/\/$/, "")}/newsletter.html#confirm=${confirmation}`;
-      await api("/emails", "POST", {
-        from: sender, to: [email], subject: "Confirm your TLB newsletter subscription",
-        text: `Thanks for signing up for the TLB newsletter! Confirm your email to receive new treats, seasonal menus, and special offers.\n\n${link}\n\nThis link expires in 24 hours. If you did not request this, ignore this email. You will not be subscribed. You can unsubscribe from any newsletter.`,
-        html: `<html><body style="margin:0;padding:32px;background:#fff9f2;color:#402b1e;font-family:Arial,sans-serif"><main style="max-width:520px;margin:auto"><h1>Fresh from TLB Kitchen</h1><p>Confirm your email to hear about new treats, seasonal menus, and special offers.</p><p><a href="${link}" style="display:inline-block;background:#714029;color:white;padding:14px 22px;border-radius:8px">Confirm my subscription</a></p><p>This link expires in 24 hours. If you did not request this, ignore this email. You will not be subscribed.</p><p>You can unsubscribe from any newsletter.</p><p>The Little Baker Kitchen</p></main></body></html>`,
-      }, `newsletter-confirm-${state.request_id}`);
+    const input = { email, source, token_hash: await digest(randomToken()), ip_hash: await digest(`${credentials().key}:${address}`) };
+    let state = await service("begin_subscribe", input);
+    if (state.resume_import) {
+      await resumePreference(api, state, config);
+      state = await service("begin_subscribe", input);
     }
-    return json(generic, 200, headers);
+    if (state.already_subscribed) {
+      const contact = await api(`/contacts/${encodeURIComponent(email)}`);
+      if (await subscribed(api, contact, config.topic_id)) return json(success, 200, headers);
+      // This form submission is fresh consent to rejoin the newsletter topic.
+      // A global provider opt-out is still preserved by activateSubscription.
+      const reconciled = await service("reconcile", { email, status: "unsubscribed", revision: state.revision });
+      if (!reconciled.updated) throw new HttpError(409, "Your preferences changed. Please try again.");
+      state = await service("begin_subscribe", input);
+    }
+    if (state.busy || state.resume_import) throw new HttpError(409, "Your newsletter signup is still processing. Please wait a moment and try again.");
+    if (state.rate_limited) throw new HttpError(429, "Please wait a minute before trying to subscribe again.");
+    if (!state.operation_id || !state.email) throw new HttpError(503, "Newsletter signup could not be started. Please try again.");
+    await activateSubscription(api, state, config);
+    return json(success, 200, headers);
   }
 
   if (["status", "popup_claim", "popup_seen"].includes(action)) {
@@ -239,32 +269,11 @@ Deno.serve(endpoint(async (request, headers) => {
     if (state.done) return json({ ok: true, status: "unsubscribed" }, 200, headers);
     if (state.resume_import) throw new HttpError(409, "Your newsletter preferences are being updated. Please try again.");
     state.operation_kind = action;
-    let contact = await api(`/contacts/${encodeURIComponent(state.email)}`);
     if (action === "confirm") {
-      if (state.already_subscribed) {
-        if (!await subscribed(api, contact, config.topic_id)) throw new HttpError(410, "You have unsubscribed since using this link. Please request a new confirmation email to rejoin.");
-        return json({ ok: true, status: "subscribed" }, 200, headers);
-      }
-      if (contact?.unsubscribed) {
-        await service("cancel_operation", { email: state.email, operation_id: state.operation_id });
-        throw new HttpError(409, "Your address is opted out of all TLB marketing emails. Use the preferences link in a previous newsletter or contact TLB to rejoin.");
-      }
-      if (!contact) {
-        contact = await api("/contacts", "POST", { email: state.email, segments: [{ id: config.segment_id }], topics: [{ id: config.topic_id, subscription: "opt_in" }] });
-        if (!contact?.id) throw new HttpError(503, "Subscription could not be confirmed. Please try again in a moment.");
-        await verifyPreference(api, contact.id, config.topic_id, "opt_in");
-      } else {
-        await api(`/contacts/${encodeURIComponent(contact.id)}/segments/${encodeURIComponent(config.segment_id)}`, "POST");
-        state.contact_id = contact.id;
-        const imported = await updatePreference(api, state, contact.id, config.topic_id, "opt_in");
-        await finishPreference(api, state, config, imported);
-        return json({ ok: true, status: "subscribed" }, 200, headers);
-      }
-      if (!contact?.id) throw new HttpError(503, "Subscription could not be confirmed. Please try again in a moment.");
-      const unsubscribeToken = randomToken();
-      await service("finish_confirm", { email: state.email, operation_id: state.operation_id, contact_id: contact.id, unsubscribe_token_hash: await digest(unsubscribeToken) });
-      return json({ ok: true, status: "subscribed" }, 200, headers);
+      await activateSubscription(api, state, config);
+      return json(success, 200, headers);
     }
+    const contact = await api(`/contacts/${encodeURIComponent(state.email)}`);
     if (contact) {
       state.contact_id = contact.id;
       const imported = await updatePreference(api, state, contact.id, config.topic_id, "opt_out");

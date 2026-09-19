@@ -1,4 +1,5 @@
 import { HttpError } from "./server.ts";
+import { renderNewsletterWelcome } from "./newsletter-welcome.ts";
 
 const escape = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const money = (value: unknown) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2 }).format(Number(value || 0) / 100);
@@ -34,6 +35,7 @@ function renderReviewEmail(order: any, settings: any, site: URL): { html: string
 }
 
 export function renderEmail(payload: any): { html: string; text: string } {
+  if (payload?.event_type === "newsletter_welcome") return renderNewsletterWelcome(payload);
   const order = payload?.order;
   const settings = { ...payload?.settings };
   // Preserve fulfillment and payment instructions saved with the submitted order.

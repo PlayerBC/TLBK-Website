@@ -2,16 +2,26 @@
 
 The newsletter is for new products, seasonal menus, and promotions. Account verification and order/payment/pickup emails continue independently. This feature captures consent and manages preferences; it does not create or send a marketing campaign.
 
+## Immediate signup rollout · September 19, 2026
+
+The immediate-subscription migration is installed, with newsletter Edge Function v9 and email-worker v12 active. Publish the matching homepage, shop, newsletter page, and account files together. The existing worker schedule runs every five minutes; welcome delivery uses that queue and may take a few minutes.
+
+Validation: 169 database checks, 67 Edge tests, newsletter browser scenarios, and the static build pass. A production transaction verified activation plus one queued welcome and duplicate handling, then rolled back its fixture. Live inert requests verified the new response and rejected invalid email, unauthenticated preferences, and unauthorized worker calls. Existing subscriber, pending subscriber, order, and outbox counts were unchanged. Security advisor findings match the prior baseline. Real inbox delivery was not exercised during this rollout; no test email or campaign was sent.
+
 ## Customer behavior
 
 - The homepage and `newsletter.html` offer a newsletter signup form. No account or purchase is required.
-- Account signup has an optional, initially unchecked newsletter checkbox. Account verification and newsletter confirmation are separate emails and separate decisions.
-- Signed-in customers can subscribe or unsubscribe in **My account**. Newsletter delivery begins only after a separate email confirmation.
+- Account signup has an optional, initially unchecked newsletter checkbox. Choosing the newsletter subscribes immediately and queues a welcome email. Account verification remains separate.
+- Signed-in customers can subscribe or unsubscribe in **My account**. Saving a checked newsletter preference subscribes immediately; no confirmation email is required.
 - The shop can show a dismissible signup popup after five seconds, once the page is ready and no product or checkout dialog is open. Closing it counts as having seen it.
 - For a signed-in, verified account, a database record makes the popup a once-ever prompt across browsers/devices. For a guest, local browser storage records that it was shown without an expiry. Clearing storage, private browsing, or using another browser/device can show it again. When guest browser storage is unavailable, the popup is suppressed and the normal signup forms remain available. There is no anonymous cross-device identity tracking.
 - Demo pages and order-status links do not show the popup. Customers can still subscribe through the normal form after dismissing it.
 
-Submitting a form requests a confirmation email. Its link opens a page with a confirmation button; merely opening the link does not subscribe, so an email scanner cannot confirm consent by fetching the page. Confirmation expires after 24 hours. Requesting a replacement makes the previous pending link invalid. The database stores token hashes and consent events, not the raw confirmation links.
+Submitting a valid form immediately opts the contact into the newsletter and records consent. The same database transaction activates the subscription and queues a welcome email. Repeat signup by an already active contact succeeds without another welcome. Welcome delivery uses the existing email worker with a stable event key, retry limits, and an unsubscribe link. An email delivery failure does not undo the subscription. Unsubscribe and provider suppression are rechecked before welcome delivery.
+
+Already pending subscriptions are not bulk activated. Submitting a form again subscribes them immediately. Previously issued, unexpired confirmation links still work and require an explicit button click; opening a link alone never changes a preference. Account verification is unchanged.
+
+The private outbox retains the welcome's unsubscribe token so every retry has the same body. Subscriber rows store only token hashes; browser responses never contain these tokens. The consent version is `tlb-newsletter-v2-single-opt-in`. Historical `confirmed` event/operation names now mean activation and do not imply email verification for this consent version.
 
 ## Resend configuration
 
@@ -26,7 +36,7 @@ Use these existing resources; do not recreate them or import all customers as su
 | Newsletter segment ID | `9c281ec2-ae4a-474a-8067-cf5afabc79a3` |
 | Website origin | `https://thelittlebakerkitchen.com` |
 
-After confirmation, the backend adds the contact to this segment and opts them into this topic. An account unsubscribe opts them out of this topic; segment membership can remain. Other topic subscriptions and global unsubscribe settings are preserved. A contact who previously opted out of all TLB marketing is not silently resubscribed: confirmation explains that they must use an existing Resend preference link or contact TLB to rejoin. Resolve that request only with the contact's consent.
+On signup, the backend adds the contact to this segment and opts them into this topic. An account unsubscribe opts them out of this topic; segment membership can remain. Other topic subscriptions and global unsubscribe settings are preserved. A contact who previously opted out of all TLB marketing is not silently resubscribed: signup explains that they must use an existing Resend preference link or contact TLB to rejoin. Resolve that request only with the contact's consent.
 
 Resend's global unsubscribe setting overrides individual topic preferences. An `opt_out` topic default requires explicit opt-in. [Resend topics](https://resend.com/docs/dashboard/topics/introduction), [unsubscribe preferences](https://resend.com/docs/dashboard/audiences/managing-unsubscribe-list).
 
@@ -36,7 +46,7 @@ The account page checks Resend when its stored state is subscribed, and records 
 
 Use the existing **TLB Kitchen System** Supabase project (`aulhqofjjckwwjmdvqgi`). Do not reset or reinstall the ordering database.
 
-1. Apply the newsletter migrations in order, after their prerequisites: `supabase/migrations/20260918134354_newsletter_subscriptions.sql`, then `supabase/migrations/20260918165306_newsletter_durable_imports.sql`. The first creates private newsletter configuration, subscriber, consent-event, and popup records plus the service-only RPC. The second records pending provider imports so retries cannot submit conflicting jobs. The `tlb` schema stays unexposed; browser roles receive no table or RPC access.
+1. Apply the newsletter migrations in order, after their prerequisites: `supabase/migrations/20260918134354_newsletter_subscriptions.sql`, then `supabase/migrations/20260918165306_newsletter_durable_imports.sql`, then (after all ordering prerequisites) `supabase/migrations/20260919081558_newsletter_immediate_subscription.sql`. The first creates private newsletter configuration, subscriber, consent-event, and popup records plus the service-only RPC. The second records pending provider imports so retries cannot submit conflicting jobs. The last migration adds immediate signup and durable welcome delivery. Deploy the updated `email-worker` and shared modules before the updated `newsletter` function so queued welcomes have a renderer. Keep the existing worker schedule and custom token authorization. The `tlb` schema stays unexposed; browser roles receive no table or RPC access.
 2. Set the resource IDs and production origin in SQL Editor:
 
    ```sql
@@ -48,19 +58,19 @@ Use the existing **TLB Kitchen System** Supabase project (`aulhqofjjckwwjmdvqgi`
    ```
 
 3. Configure the Edge Function secrets below. Enter secret values through Supabase's secret settings or your existing secure deployment process; do not put them in GitHub files, screenshots, frontend JavaScript, or chat.
-4. Deploy `supabase/functions/newsletter/index.ts` as the **newsletter** Edge Function, including its shared module dependency. `supabase/config.toml` sets `[functions.newsletter] verify_jwt = false` so guests can request and confirm subscriptions. Account actions still validate the bearer token with Supabase Auth inside the handler, and derive the email from the verified account.
+4. Deploy `supabase/functions/newsletter/index.ts` as the **newsletter** Edge Function, including its shared module dependency. `supabase/config.toml` sets `[functions.newsletter] verify_jwt = false` so guests can subscribe and use previously issued links. Account actions still validate the bearer token with Supabase Auth inside the handler, and derive the email from the verified account.
 5. Check the configuration with a controlled test inbox, then publish the frontend files together, including `newsletter.html`, the newsletter scripts/styles, and the homepage, shop, and account changes. A GitHub Pages publication alone does not install the SQL migration or Edge Function.
 
 | Server setting | Purpose |
 | --- | --- |
-| `NEWSLETTER_RESEND_API_KEY` | Optional dedicated Resend **Full Access** API key for sending confirmations and managing contacts, topics, and segment membership. Preferred when set. |
+| `NEWSLETTER_RESEND_API_KEY` | Optional dedicated Resend **Full Access** API key for sending welcomes and managing contacts, topics, and segment membership. Preferred when set. |
 | `RESEND_API_KEY` | Fallback when the newsletter-specific key is absent. An existing sending-only key is insufficient for contact/preferences operations. |
-| `NEWSLETTER_FROM` | Optional verified sender address for newsletter confirmations, for example `TLB Kitchen <hello@YOUR_VERIFIED_DOMAIN>`. Preferred when set. |
+| `NEWSLETTER_FROM` | Optional verified sender address for newsletter welcomes, for example `TLB Kitchen <hello@YOUR_VERIFIED_DOMAIN>`. Preferred when set. |
 | `EMAIL_FROM` | Existing verified sender used when `NEWSLETTER_FROM` is absent. |
 | `ALLOWED_ORIGINS` | Comma-separated permitted website origins, including `https://thelittlebakerkitchen.com`. Preserve existing origins needed by the ordering functions. |
 | Supabase server credentials | Existing project-provided URL and service-role/secret credentials; never a frontend setting. |
 
-For a preview, use that preview's exact origin in the newsletter configuration and allowed origins so confirmation links return to the intended website. Restore the production origin before production acceptance. Do not change production email redirects merely to test an unrelated preview.
+For a preview, use that preview's exact origin in the newsletter configuration and allowed origins so unsubscribe links return to the intended website. Restore the production origin before production acceptance. Do not change production email redirects merely to test an unrelated preview.
 
 The current GitHub connector can write to `PlayerBC/TLBK-Website` but cannot push to `BrentChuaTLBK/bakery-website`. Deliver the change through a fork branch and a pull request against the original repository. The original repository owner must merge/publish it. A commit or pull request only in the fork does not update the live original website.
 
@@ -90,21 +100,21 @@ Use inboxes you control and a test account. Do not send a campaign to the newsle
 
 | Check | Required result |
 | --- | --- |
-| Homepage form on desktop and mobile | Clear purpose and confirmation message; no layout overflow; confirmation reaches the controlled inbox. |
-| Before confirmation | No newsletter opt-in is created in Resend. Existing marketing preferences are unchanged. |
-| Open confirmation link only | The page requests an explicit click. Provider preferences remain unchanged until that click. |
-| Confirm | The page succeeds; the contact is in the newsletter segment with **TLB Newsletter** opted in; account preference shows subscribed. |
+| Homepage form on desktop and mobile | Clear purpose and immediate success message; no layout overflow; one welcome reaches the controlled inbox. |
+| Submit signup | Newsletter opt-in is stored immediately and one welcome is queued. Other marketing preferences are unchanged. |
+| Open an old confirmation link only | The page requests an explicit click. Provider preferences remain unchanged until that click. |
+| Use an old unexpired confirmation link | The page succeeds; the contact is in the newsletter segment with **TLB Newsletter** opted in; account preference shows subscribed. |
 | Confirm a used link again | It is safe and cannot undo an intervening unsubscribe. |
-| Invalid, replaced, or expired link | Clear failure and a route to request a fresh link; no subscription change. Test expiry locally rather than editing live customer records. |
-| Account signup, checkbox unchecked | Account creation/verification succeeds and no newsletter confirmation is requested. |
-| Account signup, checkbox checked | Separate account and newsletter confirmations arrive. Newsletter failure does not make account creation appear to fail or require creating it again. |
+| Invalid, replaced, or expired link | Clear failure and a route to sign up again; no subscription change. Test expiry locally rather than editing live customer records. |
+| Account signup, checkbox unchecked | Account creation/verification succeeds and no newsletter subscription or welcome is requested. |
+| Account signup, checkbox checked | The newsletter subscribes immediately and a welcome is queued; the account verification email remains separate. Newsletter failure does not make account creation appear to fail or require creating it again. |
 | Shop popup | Shows once after the delay, can be dismissed with its close button or Escape, and does not cover product/checkout dialogs. |
 | Guest revisit | Popup stays dismissed in the same browser. A clean browser profile may show it once. |
 | Signed-in revisit | Popup stays dismissed across a second browser/device for the same verified account. A different account has its own record. |
 | Account unsubscribe | Only the newsletter topic becomes opted out. Other topic settings and transactional account/order email behavior are preserved. |
-| Resend preferences unsubscribe | Account page reconciles the opt-out on its next visit. A fresh, separately confirmed request is needed to rejoin this topic. |
-| Existing global opt-out | Confirmation does not clear it or reactivate other topics. The customer gets a useful explanation. |
-| Repeated requests | The response does not reveal whether an address is subscribed. Requests are limited to one per minute and three per hour per address, 20 per hour per hashed source address, and 100 per hour overall. |
+| Resend preferences unsubscribe | Account page reconciles the opt-out on its next visit. A fresh form submission is needed to rejoin this topic. |
+| Existing global opt-out | Signup does not clear it or reactivate other topics. The customer gets a useful explanation. |
+| Repeated requests | Active subscriptions succeed without another welcome. Rate-limited or busy requests clearly ask the customer to retry. New signup attempts are limited to one per minute and three per hour per address, 20 per hour per hashed source address, and 100 per hour overall. |
 | Provider outage or partial failure | Safe error, no secrets exposed, and no false success. A busy update can require waiting 90 seconds before retrying. Pending imports survive lease expiry; retry resumes the same job. Verify eventual provider and account state agree. |
 | Unknown import result | A lost upload response blocks further preference jobs until an operator recovers that exact import ID. The system must not submit a second import or clear the marker merely because 90 seconds elapsed. |
 | Completed import with wrong result | Failed row counts or a definite contact/topic mismatch return an error and release the terminal job for a later explicit retry. Transient read failures retain the job for verification. |
@@ -115,7 +125,7 @@ Record the browser/device, action, result, and timestamp. Keep keys, confirmatio
 
 If signup reports unavailable, check the migration/config row, function deployment, allowed origin, verified sender, and Full Access key permissions. If a retry says the preference is being updated, wait for the 90-second operation lease before retrying. This wait does not expire a pending provider import. If the message says the update needs verification, use the operator recovery procedure below. Do not repeatedly rotate links, clear unsubscribe flags, or bulk opt customers in to diagnose a failure.
 
-## Acceptance finding: topic updates accepted without taking effect
+## Historical acceptance finding: topic updates accepted without taking effect
 
 During controlled live acceptance on 19 September 2026 (Manila time), Resend returned HTTP 200 and `{object: "contact_topics", id: ...}` for topic-update requests, but subsequent provider reads still showed the previous subscription. Both documented contact-ID and email-address paths produced this result, including a separate connector request. The topic remained opted in more than 20 minutes later despite matching contact and topic IDs. The original website had reported an unsubscribe and saved it locally without changing the provider preference.
 

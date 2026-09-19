@@ -1,5 +1,6 @@
 import { constantTimeEqual, env, HttpError, json, service } from "../_shared/server.ts";
 import { renderEmail } from "../_shared/emails.ts";
+import { newsletterWelcomeAllowed } from "../_shared/newsletter-welcome.ts";
 
 // This endpoint has its own non-public worker credential. It does not accept a
 // browser user, anonymous key, or order token as authority to send messages.
@@ -27,11 +28,17 @@ Deno.serve(async (request: Request) => {
         if (current?.skip) { stats.skipped++; continue; }
         if (!current?.payload) throw new HttpError(503, "The leased message could not be validated before delivery.");
         const message = current;
-        const key = env("RESEND_API_KEY");
-        const sender = env("EMAIL_FROM");
+        const welcome = message.payload.event_type === "newsletter_welcome";
+        const key = (welcome && env("NEWSLETTER_RESEND_API_KEY")) || env("RESEND_API_KEY");
+        const sender = (welcome && env("NEWSLETTER_FROM")) || env("EMAIL_FROM");
         if (!key || !sender) throw new HttpError(503, "Email delivery is waiting for RESEND_API_KEY and EMAIL_FROM configuration.");
         if (!message.to_email || !message.event_key) throw new HttpError(503, "The email outbox is missing a recipient or event key.");
         const rendered = renderEmail(message.payload);
+        if (welcome && !await newsletterWelcomeAllowed(message.to_email, message.payload.topic_id, key)) {
+          await service("email_skipped", { id: row.id, lease_token: row.lease_token, reason: "Newsletter recipient has opted out or no longer exists." }, 8000);
+          stats.skipped++;
+          continue;
+        }
         const response = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "Idempotency-Key": message.event_key },

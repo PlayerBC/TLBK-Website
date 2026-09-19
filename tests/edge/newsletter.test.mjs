@@ -99,38 +99,50 @@ async function assertSingleTopicImport(call, email, subscription) {
   assert.deepEqual(parseCsv(await file.text()), [['email', 'unsubscribed'], [email, '']], 'Exactly one quoted contact row, preserving global unsubscribe');
 }
 
-test('capture sends a confirmation with a hashed token, no contact creation, and an idempotency key', async () => {
-  const calls = setup({ request: { send: true, request_id: 'request-1' } }, url => reply(url.includes('/topics/') ? { id: config.topic_id, default_subscription: 'opt_out' } : { id: 'email-1' }));
-  const response = await request({ action: 'subscribe', email: 'New+tlb@Example.com', source: 'shop_popup' });
-  assert.equal(response.status, 200);
-  const captured = rpcCalls(calls).find(x => x.body.p_action === 'request').body.p_payload;
-  assert.equal(captured.email, 'new+tlb@example.com');
-  assert.match(captured.token_hash, /^[0-9a-f]{64}$/);
-  assert.match(captured.ip_hash, /^[0-9a-f]{64}$/);
-  const sends = providerCalls(calls).filter(x => x.url.endsWith('/emails'));
-  assert.equal(sends.length, 1);
-  assert.equal(sends[0].url, 'https://api.resend.com/emails');
-  assert.equal(sends[0].options.headers['Idempotency-Key'], 'newsletter-confirm-request-1');
-  const raw = sends[0].body.text.match(/#confirm=([a-f0-9]{64})/)[1];
-  assert.notEqual(raw, captured.token_hash);
-  assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))).toString('hex'), captured.token_hash);
-  assert.doesNotMatch(await response.text(), /private-|[a-f0-9]{64}/);
+test('signup activates immediately and atomically requests one welcome with a private unsubscribe link', async () => {
+  const calls = setup({ begin_subscribe: { valid:true,email:'new+tlb@example.com',operation_id:'operation-1',request_id:'request-1' } }, importProvider({exists:false}));
+  const response = await request({ action:'subscribe',email:'New+tlb@Example.com',source:'shop_popup' });
+  assert.equal(response.status,200);
+  const result=await response.json(); assert.equal(result.status,'subscribed');
+  assert.doesNotMatch(JSON.stringify(result),/private-|[a-f0-9]{64}|confirm=/);
+  const captured=rpcCalls(calls).find(x=>x.body.p_action==='begin_subscribe').body.p_payload;
+  assert.equal(captured.email,'new+tlb@example.com');
+  assert.match(captured.token_hash,/^[a-f0-9]{64}$/);assert.match(captured.ip_hash,/^[a-f0-9]{64}$/);
+  const completion=finished(calls);assert.equal(completion.length,1);
+  const queued=completion[0].body.p_payload;
+  assert.match(queued.unsubscribe_token,/^[a-f0-9]{64}$/);
+  assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(queued.unsubscribe_token))).toString('hex'),queued.unsubscribe_token_hash);
+  assert.ok(!providerCalls(calls).some(x=>x.url.endsWith('/emails')),'Welcome delivery is durably queued, never an inline confirmation');
 });
 
-test('sending-only key cannot send a confirmation that would fail during contact management', async () => {
-  const calls = setup({ request: { send: true, request_id: 'request-2' } }, () => reply({ name: 'restricted_api_key' }, 401));
-  assert.equal((await request({ action: 'subscribe', email: 'test@example.com' })).status, 503);
-  assert.ok(!providerCalls(calls).some(x => x.url.endsWith('/emails')));
+test('repeat active subscription sends no duplicate welcome or provider update',async()=>{
+  const calls=setup({begin_subscribe:{already_subscribed:true,email:'existing@example.com',revision:2}});
+  const response=await request({action:'subscribe',email:'existing@example.com'});
+  assert.equal(response.status,200);assert.equal((await response.json()).status,'subscribed');
+  assert.equal(finished(calls).length,0);assert.ok(providerCalls(calls).every(x=>x.options.method==='GET'));
 });
 
-test('honeypot and throttled signup do not send mail and use generic success', async () => {
-  let calls = setup();
-  assert.equal((await request({ action: 'subscribe', website: 'bot' })).status, 200);
-  assert.equal(calls.length, 0);
-  calls = setup({ request: { send: false } });
-  const response = await request({ action: 'subscribe', email: 'test@example.com' });
-  assert.equal(response.status, 200);
-  assert.equal(providerCalls(calls).length, 0);
+test('existing topic opt-out can rejoin through a new signup while global suppression remains protected',async()=>{
+  let begins=0;
+  const calls=setup({begin_subscribe:()=>++begins===1?{already_subscribed:true,email:'test@example.com',revision:2}:{email:'test@example.com',operation_id:'rejoin'},reconcile:{updated:true}},importProvider({preference:'opt_out'}));
+  assert.equal((await request({action:'subscribe',email:'test@example.com'})).status,200);
+  assert.equal(begins,2);assert.equal(imported(calls).length,1);assert.equal(finished(calls).length,1);
+  const blocked=setup({begin_subscribe:{email:'test@example.com',operation_id:'blocked'}},importProvider({global:true}));
+  assert.equal((await request({action:'subscribe',email:'test@example.com'})).status,409);
+  assert.equal(finished(blocked).length,0);assert.equal(imported(blocked).length,0);
+});
+
+test('sending-only key cannot falsely report a successful signup',async()=>{
+  const calls=setup({begin_subscribe:{email:'test@example.com',operation_id:'operation'}},()=>reply({name:'restricted_api_key'},401));
+  assert.equal((await request({action:'subscribe',email:'test@example.com'})).status,503);
+  assert.equal(finished(calls).length,0);
+});
+
+test('honeypot is inert; throttled and busy signups report a retry instead of false success',async()=>{
+  let calls=setup();assert.equal((await request({action:'subscribe',website:'bot'})).status,200);assert.equal(calls.length,0);
+  for(const [state,expected] of [[{rate_limited:true},429],[{busy:true},409]]){
+    calls=setup({begin_subscribe:state});assert.equal((await request({action:'subscribe',email:'test@example.com'})).status,expected);assert.equal(providerCalls(calls).length,0);
+  }
 });
 
 test('origin, malformed email, unknown actions and unauthenticated account actions are rejected', async () => {

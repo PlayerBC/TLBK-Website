@@ -137,7 +137,9 @@ export default async function ({ db, check, state }) {
     }
     const migration = await readFile(new URL('../../supabase/migrations/20260918165306_newsletter_durable_imports.sql', import.meta.url), 'utf8');
     const before = await row(operation.email);
+    const installed = await scalar("select pg_get_functiondef('public.newsletter_service(text,jsonb)'::regprocedure)");
     await db.exec(migration);
+    await db.exec(installed); // Preserve later signup upgrades when replaying this historical migration.
     assert.deepEqual(await row(operation.email), before);
     assert.equal(await scalar("select has_function_privilege('service_role','public.newsletter_service(text,jsonb)','execute')"), true);
     assert.equal(await scalar("select has_function_privilege('authenticated','public.newsletter_service(text,jsonb)','execute')"), false);

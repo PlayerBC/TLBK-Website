@@ -54,7 +54,7 @@ function formMarkup(source, id, email = '') {
     <label class="newsletter-field" for="${id}-email">Email address<input id="${id}-email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" value="${escape(email)}" required></label>
     <div class="newsletter-trap" aria-hidden="true"><label>Leave this field empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
     <button class="newsletter-button" type="submit">Subscribe to TLB’s newsletter</button>
-    <p class="newsletter-fine">By subscribing, you agree to receive occasional TLB emails about new treats, seasonal menus, and special offers. Confirm by email. Unsubscribe anytime.</p>
+    <p class="newsletter-fine">By subscribing, you agree to receive occasional TLB emails about new treats, seasonal menus, and special offers. Unsubscribe anytime.</p>
     <p class="newsletter-status" data-newsletter-status role="status" hidden></p>
   </form>`;
 }
@@ -70,14 +70,14 @@ export function mountNewsletterForms(scope = document) {
       const message = form.querySelector('[data-newsletter-status]');
       const values = new FormData(form);
       form.dataset.busy = 'true'; button.disabled = true;
-      const label = button.textContent; button.textContent = 'Sending…';
+      const label = button.textContent; button.textContent = 'Subscribing…';
       try {
         await request('subscribe', { email: String(values.get('email') || '').trim(), source: form.dataset.source || 'homepage', website: String(values.get('website') || '') });
-        status(message, 'Check your inbox and spam folder for a confirmation email. Click its link, then confirm your subscription to join the TLB newsletter.');
-        rememberPreference('pending');
-        button.textContent = 'Confirmation requested';
+        status(message, 'You’re subscribed! Look out for a welcome email from TLB.');
+        rememberPreference('subscribed');
+        button.textContent = 'Subscribed';
       } catch (error) {
-        status(message, error.message || 'We could not send the confirmation. Please try again.', true);
+        status(message, error.message || 'We could not complete your signup. Please try again.', true);
         button.disabled = false; button.textContent = label;
       } finally { delete form.dataset.busy; }
     });
@@ -98,34 +98,33 @@ export async function mountNewsletterPreferences(container, email) {
   }
   function renderPreference(current) {
     rememberPreference(current);
-    const optedIn = ['subscribed', 'pending'].includes(current);
+    const optedIn = current === 'subscribed';
     container.innerHTML = `<h2>Email preferences</h2><p>Choose whether to receive the TLB newsletter. Your order and payment emails stay on.</p>
       <form data-newsletter-preferences><label class="newsletter-check"><input type="checkbox" name="newsletter" ${optedIn ? 'checked' : ''}><span>Subscribe to TLB’s newsletter<small>Occasional emails about new treats, seasonal menus, and special offers. Unsubscribe anytime.</small></span></label>
-      <p class="muted">${current === 'pending' ? 'Confirmation pending. Check your inbox and spam folder, then confirm using the link in your email.' : current === 'subscribed' ? 'You’re subscribed to the TLB newsletter.' : 'You’re not subscribed to the TLB newsletter.'}</p>
-      <button class="newsletter-button" type="submit">Save email preference</button>${current === 'pending' ? ' <button class="newsletter-button newsletter-button-secondary" type="button" data-resend-newsletter>Resend confirmation</button>' : ''}
+      <p class="muted">${current === 'subscribed' ? 'You’re subscribed to the TLB newsletter.' : 'You’re not subscribed to the TLB newsletter.'}</p>
+      <button class="newsletter-button" type="submit">Save email preference</button>
       <p class="newsletter-status" role="status" data-newsletter-status hidden></p></form>`;
     const form = container.querySelector('form');
     const message = form.querySelector('[data-newsletter-status]');
     let busy = false;
-    const save = async resend => {
+    const save = async () => {
       if (busy) return;
       const checked = form.elements.newsletter.checked;
-      if (!resend && checked === optedIn) { status(message, current === 'pending' ? 'Your subscription is still awaiting email confirmation.' : 'Your email preference is already saved.'); return; }
+      if (checked === optedIn) { status(message, 'Your email preference is already saved.'); return; }
       busy = true;
       form.querySelectorAll('button,input').forEach(node => node.disabled = true);
       try {
-        const subscribe = resend || checked;
+        const subscribe = checked;
         await request(subscribe ? 'subscribe' : 'unsubscribe', subscribe ? { email, source: 'account', website: '' } : {});
         if (!container.isConnected) return;
-        renderPreference(subscribe ? 'pending' : 'unsubscribed');
-        status(container.querySelector('[data-newsletter-status]'), subscribe ? 'Check your inbox and spam folder, then confirm using the email link. Your subscription begins after you confirm.' : 'You’re unsubscribed from the TLB newsletter. Your order and payment emails are unchanged.');
+        renderPreference(subscribe ? 'subscribed' : 'unsubscribed');
+        status(container.querySelector('[data-newsletter-status]'), subscribe ? 'You’re subscribed! Look out for a welcome email from TLB.' : 'You’re unsubscribed from the TLB newsletter. Your order and payment emails are unchanged.');
       } catch (error) {
         status(message, error.message || 'We could not save your preference. Please try again.', true);
         form.querySelectorAll('button,input').forEach(node => node.disabled = false);
       } finally { busy = false; }
     };
-    form.onsubmit = event => { event.preventDefault(); save(false); };
-    form.querySelector('[data-resend-newsletter]')?.addEventListener('click', () => save(true));
+    form.onsubmit = event => { event.preventDefault(); save(); };
   }
 }
 
@@ -147,10 +146,10 @@ function renderLanding() {
       rememberPreference(confirming ? 'subscribed' : 'unsubscribed');
       landing.innerHTML = `<p class="newsletter-eyebrow">The TLB Newsletter</p><h1>${confirming ? 'You’re on the list!' : 'You’re unsubscribed'}</h1><p>${confirming ? 'Thanks for joining the TLB newsletter. Look out for fresh treats and news from our kitchen.' : 'You won’t receive TLB newsletters. Your order and payment emails are unchanged.'}</p><a class="newsletter-button" href="shop.html">Explore the shop</a>`;
     } catch (error) {
-      status(document.getElementById('newsletter-link-status'), error.message || 'This link could not be used. Please request a fresh confirmation email.', true);
+      status(document.getElementById('newsletter-link-status'), error.message || 'This link could not be used. Please sign up again.', true);
       button.disabled = false;
       if (confirming && !landing.querySelector('[data-newsletter-form]')) {
-        landing.insertAdjacentHTML('beforeend', `<h2 style="margin-top:24px">Need a fresh link?</h2>${formMarkup('homepage', 'newsletter-retry')}`);
+        landing.insertAdjacentHTML('beforeend', `<h2 style="margin-top:24px">Sign up again</h2>${formMarkup('homepage', 'newsletter-retry')}`);
         mountNewsletterForms(landing);
       }
     }
