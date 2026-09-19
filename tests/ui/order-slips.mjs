@@ -18,7 +18,7 @@ const small = {
   buyer: { name: 'Alex Cruz', phone: '09XX XXX 1234', email: 'alex@example.test', social_platform: 'instagram', social_username: '@alex.sample' },
   recipient: { name: 'Jamie Cruz', phone: '09XX XXX 5678' },
   address: { line1: 'Unit 3B, 123 Sample Street', line2: 'Brgy. Sample', locality: 'Quezon City, Metro Manila', postal_code: '1100' },
-  delivery_window: '9 AM - 6 PM', pickup_address: 'The Little Baker Kitchen\nCollection at the kitchen', pickup_hours: '10 AM - 5 PM', pickup_instructions: '',
+  delivery_window: '9 AM - 6 PM', pickup_address: 'The Little Baker Kitchen\nCollection at the kitchen', pickup_hours: '10 AM - 5 PM', pickup_instructions: 'CUSTOMER-PICKUP-GUIDE: bring ID and message us before you arrive.',
   instructions: 'Pack the flavors separately.\nRing the bell and call on arrival.',
   items: [item('Krisp Nori Pouch', 3, 13000, 'Flavor: Original'), item('Krisp Nori Pouch', 2, 13000, 'Flavor: Cheese')],
   subtotal_cents: 65000, discount_cents: 6500, delivery_cents: 10000, total_cents: 68500,
@@ -40,8 +40,9 @@ const client = await readFile(join(root, 'assets/ordering/client.js'), 'utf8');
 const helpers = client.slice(client.indexOf('export function money('));
 const mock = `export const configured=true,ready=Promise.resolve(),auth={getSession:async()=>({data:{session:{user:{id:'local-owner'}}}}),onAuthStateChange:()=>{}};
 export async function api(action,payload={}){window.apiCalls??=[];window.apiCalls.push(action);const fixture=JSON.parse(localStorage.getItem('${key}'));
-if(action==='admin_bootstrap')return {role:fixture.role||'owner',categories:[],inventory:[],promos:[],zones:[],staff:[],email_status:[],settings:fixture.settings,products:fixture.products,orders:[fixture.order]};
-if(action==='get_order')return fixture.order;throw Error('Unexpected API '+action)}
+const orders=fixture.orders||[fixture.order];
+if(action==='admin_bootstrap')return {role:fixture.role||'owner',categories:[],inventory:[],promos:[],zones:[],staff:[],email_status:[],settings:fixture.settings,products:fixture.products,orders};
+if(action==='get_order'){window.loadedOrderIds??=[];window.loadedOrderIds.push(payload.order_id);if(payload.order_id===fixture.failOrderId)throw Error('The selected order is no longer available.');return fixture.freshOrders?.[payload.order_id]||orders.find(order=>order.id===payload.order_id)}throw Error('Unexpected API '+action)}
 export async function upload(){throw Error('Unexpected upload')} export async function websiteVisitorStats(){return {}} ${helpers}`;
 const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
@@ -90,12 +91,13 @@ async function print(order, options = {}) {
   const popupPromise = page.waitForEvent('popup');
   await page.locator('[data-action="print-order"]').click();
   const popup = await popupPromise;
-  await popup.waitForFunction(() => window.printCalls === 1 || /cannot fit|could not load/.test(document.querySelector('[role="status"]')?.textContent));
-  if (!await popup.evaluate(() => window.printCalls)) throw new Error(await popup.locator('[role="status"]').innerText());
+  await popup.waitForFunction(() => !document.querySelector('.print-slips')?.disabled || /cannot fit|could not load/.test(document.querySelector('[role="status"]')?.textContent));
+  if (await popup.locator('.print-slips').isDisabled()) throw new Error(await popup.locator('[role="status"]').innerText());
+  await popup.locator('.print-slips').click();
   return popup;
 }
 async function noOverflow(popup) {
-  return popup.evaluate(() => [...document.querySelectorAll('.slip,.slip-left,.slip-details,.slip-header,.slip-footer')]
+  return popup.evaluate(() => [...document.querySelectorAll('.print-sheet,.slip,.slip-left,.slip-details,.slip-header,.slip-footer')]
     .every(el => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1));
 }
 try {
@@ -122,7 +124,8 @@ try {
   check('Each item appears once, in the saved order', await popup.locator('.slip-item[data-continued="false"]').count() === 6 && (await popup.locator('.slip-item').evaluateAll(cards => cards.map(card => Number(card.dataset.itemIndex)))).join() === '0,1,2,3,4,5');
   check('Continuation slips repeat reference and buyer', await popup.locator('.slip-reference').count() === 2 && await popup.locator('.slip-buyer-name').count() === 2 && (await popup.locator('.slip-number').allTextContents()).join() === 'Slip 1 of 2,Slip 2 of 2');
   check('The complete payment breakdown appears only on the final slip', await popup.locator('.slip-payment').count() === 1 && await popup.locator('.slip').last().locator('.slip-total').innerText() === 'Order total\n₱3,663.00');
-  check('Pickup preserves its saved location/hours and omits delivery address', (await popup.locator('#slips').innerText()).includes('Collection at the kitchen') && !/Unit 3B|NEW ADDRESS|NEW HOURS|NEW PICKUP/.test(await popup.locator('#slips').innerText()));
+  check('Pickup preserves its saved location/hours but excludes general customer pickup instructions', (await popup.locator('#slips').innerText()).includes('Collection at the kitchen') && !/Unit 3B|NEW ADDRESS|NEW HOURS|NEW PICKUP|CUSTOMER-PICKUP-GUIDE|Pickup instructions/.test(await popup.locator('#slips').innerText()));
+  check('Customer-entered preparation instructions still print', (await popup.locator('#slips').innerText()).includes('Keep chilled. Box separately.'));
   check('Large order has no clipped content', await noOverflow(popup));
   for (let i = 0; i < 2; i++) await popup.locator('.slip').nth(i).screenshot({ path: join(output, `large-slip-${i + 1}.png`) });
   await popup.pdf({ path: join(output, 'large-slips.pdf'), preferCSSPageSize: true, printBackground: true });
@@ -168,6 +171,76 @@ try {
   await popup.close();
   popup = await print({ ...small, buyer: {}, recipient: {}, address: {}, items: [], instructions: '' });
   check('Older incomplete orders still produce a printable summary', await popup.locator('.slip-payment').count() === 1 && await noOverflow(popup));
+  await popup.close();
+
+  const batch = [small, { ...large, id: 'order-2' }, { ...small, id: 'order-3', reference: 'SAMPLE-PICKUP', method: 'pickup', buyer: { ...small.buyer, name: 'Sam Reyes' }, instructions: 'Pack the flavors separately.', delivery_cents: 0, total_cents: 58500 }];
+  async function ordersList(orders, extras = {}) {
+    await page.evaluate(({key,fixture}) => localStorage.setItem(key, JSON.stringify(fixture)), { key, fixture: { orders, products, settings, ...extras } });
+    await page.goto(`${origin}/manage.html`, { waitUntil: 'networkidle' });
+    await page.locator('[data-view="orders"]').click();
+  }
+  async function selectedPreview() {
+    const pending = page.waitForEvent('popup');
+    await page.locator('[data-action="print-selected-orders"]').click();
+    const preview = await pending;
+    await preview.waitForFunction(() => !document.querySelector('.print-slips')?.disabled || /cannot fit|could not load|no longer available/.test(document.querySelector('[role="status"]')?.textContent));
+    return preview;
+  }
+  await ordersList(batch, { role: 'staff' });
+  check('Batch printing starts with no selection and a disabled print button', await page.locator('[data-action="print-selected-orders"]').isDisabled());
+  await page.locator('[data-print-order="order-1"]').check();
+  check('One selection updates the count and select-all mixed state', await page.locator('#print-selection-count').innerText() === '1 selected' && await page.locator('#select-print-orders').evaluate(el => el.indeterminate));
+  await page.locator('#select-print-orders').check();
+  check('Select all shown orders selects the full current result', await page.locator('[data-print-order]:checked').count() === 3);
+  popup = await selectedPreview();
+  check('Batch preview allows paper choice before opening the print dialog', !await popup.evaluate(() => window.printCalls) && !await popup.locator('#paper-size').isDisabled());
+  check('Three selected orders including continuations share one four-slip sheet', await popup.locator('.print-sheet').count() === 1 && await popup.locator('.slip').count() === 4 && await popup.locator('.slip-payment').count() === 3);
+  const dimensions = await popup.locator('.slip').first().evaluate(el => ({ width: el.offsetWidth * 25.4 / 96, height: el.offsetHeight * 25.4 / 96 }));
+  check('Every slip is five inches wide and four inches high', Math.abs(dimensions.width - 127) < .3 && Math.abs(dimensions.height - 101.6) < .3);
+  await popup.emulateMedia({ media: 'print' });
+  const placements = await popup.locator('.print-sheet').first().evaluate(sheet => {
+    const paper = sheet.getBoundingClientRect();
+    return [...sheet.children].map(card => { const rect = card.getBoundingClientRect(); return { x: (rect.x - paper.x) * 25.4 / 96, y: (rect.y - paper.y) * 25.4 / 96 }; });
+  });
+  check('Slips fill from the top-left in two rows without centering each order', Math.abs(placements[0].x - 3) < .2 && Math.abs(placements[0].y - 3) < .2 && Math.abs(placements[1].x - 130.5) < .2 && Math.abs(placements[2].y - 105.1) < .2);
+  check('The printed sheet and all its slips have no overflow', await noOverflow(popup));
+  await popup.locator('.print-sheet').screenshot({ path: join(output, 'batch-a4-sheet.png') });
+  await popup.pdf({ path: join(output, 'batch-a4.pdf'), preferCSSPageSize: true, printBackground: true });
+  await popup.emulateMedia({ media: null });
+  await popup.locator('#paper-size').selectOption('letter');
+  check('Letter paper keeps four slips at the same physical size', await popup.locator('.print-sheet[data-paper="letter"]').count() === 1 && await popup.locator('.slip').count() === 4);
+  await popup.pdf({ path: join(output, 'batch-letter.pdf'), preferCSSPageSize: true, printBackground: true });
+  await popup.locator('.print-slips').click();
+  check('One print action includes the complete batch after photos are ready', await popup.evaluate(() => window.printCalls === 1 && window.photosReadyAtPrint));
+  await popup.close();
+  check('Batch printing retrieves each selected saved order', (await page.evaluate(() => window.loadedOrderIds)).join() === 'order-1,order-2,order-3');
+  await page.locator('[data-action="clear-print-selection"]').click();
+  check('Clear selection resets checkboxes and print count', await page.locator('[data-print-order]:checked').count() === 0 && await page.locator('[data-action="print-selected-orders"]').isDisabled());
+  await page.locator('#select-print-orders').check();
+  await page.locator('#order-search').fill('Sam Reyes');
+  check('Filtering clears hidden selections', await page.locator('[data-print-order]').count() === 1 && await page.locator('[data-print-order]:checked').count() === 0);
+  await page.locator('#select-print-orders').check();
+  popup = await selectedPreview();
+  check('Select all while filtered prints only matching orders', (await popup.locator('.slip-reference').allTextContents()).every(value => value === 'SAMPLE-PICKUP'));
+  check('Paper preference is remembered for the next print job', await popup.locator('#paper-size').inputValue() === 'letter');
+  await popup.close();
+
+  const five = Array.from({length:5}, (_, i) => ({...small, id:`batch-${i}`, reference:`BATCH-${i+1}`}));
+  await ordersList(five, { freshOrders: { 'batch-0': { ...five[0], instructions: 'LATEST SAVED PREPARATION NOTE' } } });
+  await page.locator('#select-print-orders').check();
+  popup = await selectedPreview();
+  check('Five orders fill four slots then begin the next sheet', (await popup.locator('.print-sheet').evaluateAll(sheets => sheets.map(sheet => sheet.children.length))).join() === '4,1');
+  check('Batch uses fresh order details rather than stale list summaries', (await popup.locator('#slips').innerText()).includes('LATEST SAVED PREPARATION NOTE'));
+  await popup.locator('#paper-size').selectOption('a4');
+  await popup.pdf({ path: join(output, 'five-orders-a4.pdf'), preferCSSPageSize: true, printBackground: true });
+  await popup.setViewportSize({ width: 390, height: 844 });
+  await popup.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth + 1);
+  check('Multi-sheet batch preview fits mobile screens', await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  await popup.close();
+  await ordersList(batch, { failOrderId: 'order-2' });
+  await page.locator('#select-print-orders').check();
+  popup = await selectedPreview();
+  check('An unavailable selected order stops the whole print job without a partial batch', await popup.locator('.slip').count() === 0 && await popup.locator('.print-slips').isDisabled() && (await popup.locator('[role="status"]').innerText()).includes('no longer available'));
   await popup.close();
 
   await openOrder(small);

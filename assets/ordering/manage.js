@@ -4,7 +4,7 @@ import { confirmOrderTotalChange } from './order-edit-confirmation.js?v=custom-c
 import { socialContactMessage } from './checkout-fields.js?v=social-contact-1';
 import { fulfillmentStatus, matchesFulfillmentStatus, isActiveFulfillment, needsPaymentReview } from './refund-status.js?v=cancelled-review-1';
 import { renderProductPhotos, bindProductPhotoOrder } from './product-photos.js?v=photo-order-1';
-import { printOrderSlips } from './order-slips.js?v=order-slips-1';
+import { printOrderSlips } from './order-slips.js?v=batch-slips-1';
 import { productLabelSettings, labelTextColor, MAX_LABEL_LENGTH } from './product-label.js';
 import { dateCalendar, bindDateCalendars } from './date-calendar.js';
 import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-metrics-1';
@@ -23,6 +23,7 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const state = { view: 'overview', role: null, connected: false, products: [], categories: [], inventory: [], promos: [], zones: [], orders: [], settings: {}, staff: [], filters: { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }, inventoryDate: manilaDate() };
 state.productFilters = { search: '', status: '', category: '' };
 state.promoFilter = '';
+state.printSelection = new Set();
 let activeOrder = null;
 let productDraft = null;
 let clearPhotoDrag = () => {};
@@ -122,6 +123,7 @@ function render() {
   $$('.sidebar-link').forEach(button => { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-current', button.dataset.view === state.view ? 'page' : 'false'); });
   const views = { overview: overviewView, analytics: analyticsView, orders: ordersView, products: productsView, inventory: inventoryView, promos: promosView, settings: settingsView, team: teamView };
   $('#workspace').innerHTML = setupNotice() + views[state.view]();
+  syncOrderPrintSelection();
   syncVisitorPolling();
   syncPromoStatuses();
 }
@@ -159,11 +161,37 @@ function filteredOrders() {
 }
 function orderTable(orders, compact = false) {
   if (!orders.length) return empty('No orders to show', 'Orders matching your filters will appear here.');
-  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Order / customer</th><th>Fulfillment</th><th>Payment</th>${compact ? '' : '<th>Progress</th>'}<th>Total</th></tr></thead><tbody>${orders.map(order => `<tr><td><button class="table-link" data-action="open-order" data-id="${esc(order.id)}">${esc(order.reference)}</button><small>${esc(order.buyer?.name || 'Customer')}${order.refund_label ? ' · Refund label' : ''}</small></td><td>${esc(humanDate(order.fulfillment_date))}<small>${esc(label(order.method))}</small></td><td>${badge(order.payment_status)}</td>${compact ? '' : `<td>${badge(fulfillmentStatus(order))}</td>`}<td>${money(order.total_cents)}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="data-table"><thead><tr>${compact ? '' : '<th class="order-select-cell"><input type="checkbox" id="select-print-orders" aria-label="Select all shown orders for printing"></th>'}<th>Order / customer</th><th>Fulfillment</th><th>Payment</th>${compact ? '' : '<th>Progress</th>'}<th>Total</th></tr></thead><tbody>${orders.map(order => `<tr>${compact ? '' : `<td class="order-select-cell"><input type="checkbox" data-print-order="${esc(order.id)}" aria-label="Select ${esc(order.reference)} for printing" ${state.printSelection.has(order.id) ? 'checked' : ''}></td>`}<td><button class="table-link" data-action="open-order" data-id="${esc(order.id)}">${esc(order.reference)}</button><small>${esc(order.buyer?.name || 'Customer')}${order.refund_label ? ' · Refund label' : ''}</small></td><td>${esc(humanDate(order.fulfillment_date))}<small>${esc(label(order.method))}</small></td><td>${badge(order.payment_status)}</td>${compact ? '' : `<td>${badge(fulfillmentStatus(order))}</td>`}<td>${money(order.total_cents)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function syncOrderPrintSelection() {
+  if (state.view !== 'orders') return;
+  const shown = new Set(filteredOrders().map(order => order.id));
+  state.printSelection.forEach(id => { if (!shown.has(id)) state.printSelection.delete(id); });
+  const count = state.printSelection.size;
+  const all = $('#select-print-orders');
+  if (all) { all.checked = count > 0 && count === shown.size; all.indeterminate = count > 0 && count < shown.size; }
+  $$('[data-print-order]').forEach(box => { box.checked = state.printSelection.has(box.dataset.printOrder); });
+  const status = $('#print-selection-count');
+  if (status) status.textContent = `${count} selected`;
+  const button = $('[data-action="print-selected-orders"]');
+  if (button) { button.disabled = !count || !state.connected; button.textContent = count ? `Print selected (${count})` : 'Print selected'; }
+  const clear = $('[data-action="clear-print-selection"]');
+  if (clear) clear.disabled = !count;
+}
+async function loadPrintOrders(ids) {
+  const orders = new Array(ids.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, ids.length) }, async () => {
+    while (next < ids.length) {
+      const index = next++;
+      orders[index] = await api('get_order', { order_id: ids[index] });
+    }
+  }));
+  return orders;
 }
 function ordersView() {
   const f = state.filters;
-  return heading('Orders', 'From the first checkout to the final handoff.', `<button class="button button-secondary" data-action="export-orders" ${locked()}>Export CSV</button><button class="button" data-action="refresh" ${locked()}>Refresh orders</button>`) + `<section class="panel"><div class="filters"><label>Search<input type="search" id="order-search" data-filter="search" placeholder="Reference, name, email, or phone" value="${esc(f.search)}"></label><label>Payment<select data-filter="payment">${options(PAYMENT, f.payment, 'All payment statuses')}</select></label><label>Fulfillment<select data-filter="fulfillment">${options(FULFILLMENT, f.fulfillment, 'All fulfillment statuses')}</select></label><label>Method<select data-filter="method">${options(['pickup', 'delivery'], f.method, 'Pickup & delivery')}</select></label></div><div class="filter-secondary">${input('filter-date', 'Fulfillment date', f.date, 'date', 'data-filter="date"')}${select('filter-refund', 'Refund label', option('', 'All orders', f.refund) + option('yes', 'With Refund label', f.refund) + option('no', 'Without Refund label', f.refund), 'data-filter="refund"')}<label class="check-field no-margin"><input type="checkbox" data-filter="upcoming" ${f.upcoming ? 'checked' : ''}>Upcoming, grouped by date</label><button class="button button-quiet" data-action="clear-filters">Clear filters</button></div><div class="section-heading"><p class="muted no-margin" id="order-count">${filteredOrders().length} orders</p></div><div id="order-table">${orderTable(filteredOrders())}</div></section>`;
+  return heading('Orders', 'From the first checkout to the final handoff.', `<button class="button button-secondary" data-action="export-orders" ${locked()}>Export CSV</button><button class="button" data-action="refresh" ${locked()}>Refresh orders</button>`) + `<section class="panel"><div class="filters"><label>Search<input type="search" id="order-search" data-filter="search" placeholder="Reference, name, email, or phone" value="${esc(f.search)}"></label><label>Payment<select data-filter="payment">${options(PAYMENT, f.payment, 'All payment statuses')}</select></label><label>Fulfillment<select data-filter="fulfillment">${options(FULFILLMENT, f.fulfillment, 'All fulfillment statuses')}</select></label><label>Method<select data-filter="method">${options(['pickup', 'delivery'], f.method, 'Pickup & delivery')}</select></label></div><div class="filter-secondary">${input('filter-date', 'Fulfillment date', f.date, 'date', 'data-filter="date"')}${select('filter-refund', 'Refund label', option('', 'All orders', f.refund) + option('yes', 'With Refund label', f.refund) + option('no', 'Without Refund label', f.refund), 'data-filter="refund"')}<label class="check-field no-margin"><input type="checkbox" data-filter="upcoming" ${f.upcoming ? 'checked' : ''}>Upcoming, grouped by date</label><button class="button button-quiet" data-action="clear-filters">Clear filters</button></div><div class="section-heading"><p class="muted no-margin" id="order-count">${filteredOrders().length} orders</p></div><div class="order-print-actions"><p id="print-selection-count" aria-live="polite">0 selected</p><button class="button button-secondary" data-action="print-selected-orders" disabled>Print selected</button><button class="button button-quiet" data-action="clear-print-selection" disabled>Clear selection</button></div><div id="order-table">${orderTable(filteredOrders())}</div></section>`;
 }
 function filteredProducts() {
   const { search, status, category } = state.productFilters;
@@ -503,7 +531,13 @@ async function onAction(button) {
     case 'close-dialog': closeDialog(); break;
     case 'refresh': await Promise.all([refresh(), visitorPoller.refresh()]); toast('Dashboard refreshed.'); break;
     case 'upcoming': state.filters.upcoming = true; state.view = 'orders'; render(); break;
-    case 'clear-filters': state.filters = { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }; render(); break;
+    case 'clear-filters': state.filters = { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }; state.printSelection.clear(); render(); break;
+    case 'clear-print-selection': state.printSelection.clear(); syncOrderPrintSelection(); break;
+    case 'print-selected-orders': {
+      const ids = filteredOrders().filter(order => state.printSelection.has(order.id)).map(order => order.id);
+      if (ids.length) await printOrderSlips(() => loadPrintOrders(ids), { products: state.products, settings: state.settings });
+      break;
+    }
     case 'clear-product-filters':
       state.productFilters = { search: '', status: '', category: '' };
       $$('[data-product-filter]').forEach(control => { control.value = ''; });
@@ -591,16 +625,27 @@ document.addEventListener('input', event => {
     return;
   }
   if (target.dataset.filter) {
+    state.printSelection.clear();
     state.filters[target.dataset.filter] = target.type === 'checkbox' ? target.checked : target.value;
     const orders = filteredOrders();
     $('#order-table').innerHTML = orderTable(orders);
     $('#order-count').textContent = `${orders.length} orders`;
+    syncOrderPrintSelection();
   }
   if (target.hasAttribute('data-edit-value') && editDraft) { captureEdit(); updateEditPreview(); }
 });
 document.addEventListener('change', async event => {
   const target = event.target;
   try {
+    if (target.id === 'select-print-orders') {
+      filteredOrders().forEach(order => target.checked ? state.printSelection.add(order.id) : state.printSelection.delete(order.id));
+      syncOrderPrintSelection(); return;
+    }
+    if (target.hasAttribute('data-print-order')) {
+      if (target.checked) state.printSelection.add(target.dataset.printOrder);
+      else state.printSelection.delete(target.dataset.printOrder);
+      syncOrderPrintSelection(); return;
+    }
     if (target.id === 'promo-status-filter') {
       state.promoFilter = target.value;
       syncPromoStatuses();

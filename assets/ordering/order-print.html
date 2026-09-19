@@ -6,11 +6,13 @@
   <meta name="robots" content="noindex,nofollow">
   <meta name="referrer" content="no-referrer">
   <title>Order preparation slips</title>
-  <link rel="stylesheet" href="order-slips.css?v=order-slips-1">
+  <link rel="stylesheet" href="order-slips.css?v=batch-slips-1">
+  <style id="paper-style">@page{size:A4 landscape;margin:0}</style>
 </head>
 <body>
   <div class="print-toolbar">
     <p role="status">Open an order in the kitchen dashboard to print its preparation slips.</p>
+    <label class="paper-choice">Paper <select id="paper-size" disabled><option value="a4">A4 landscape</option><option value="letter">Letter landscape</option></select></label>
     <button type="button" class="print-slips" disabled>Print slips</button>
     <button type="button" class="close-preview">Close</button>
   </div>

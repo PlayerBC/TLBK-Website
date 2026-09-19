@@ -112,6 +112,11 @@
 @media(max-width:760px){.product-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.product-filters .product-search{grid-column:1/-1}}
 
 /* Product photo ordering: pointer dragging and keyboard focus share the tile. */
+.order-print-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 18px}
+.order-print-actions p{margin:0;font-size:11px;color:var(--muted)}
+.manage-page .order-select-cell{width:42px;padding-right:6px}
+.order-select-cell input{width:18px;height:18px;accent-color:var(--caramel);cursor:pointer}
+.order-select-cell input:focus-visible{outline:2px solid var(--caramel);outline-offset:3px}
 .photo-tile .photo-reorder{position:static;display:block;width:100%;height:100%;padding:0;border:0;border-radius:8px;background:transparent;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .photo-tile .photo-reorder img{display:block;pointer-events:none;-webkit-user-drag:none}
 .photo-tile .photo-reorder:disabled{cursor:default;touch-action:auto}

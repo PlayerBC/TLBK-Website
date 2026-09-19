@@ -3,7 +3,7 @@ import { escapeHtml as esc, money, formatDate } from './client.js?v=visitors-1';
 const label = value => String(value || '').replaceAll('_', ' ').replace(/^\w/, c => c.toUpperCase());
 const text = value => String(value ?? '').trim();
 const lines = values => values.map(text).filter(Boolean).join('\n');
-const previewUrl = new URL('./order-print.html?v=order-slips-1', import.meta.url).href;
+const previewUrl = new URL('./order-print.html?v=batch-slips-1', import.meta.url).href;
 
 function photoUrl(value) {
   if (typeof value !== 'string' || !(/^(https?:\/\/|assets\/)/.test(value))) return '';
@@ -39,9 +39,6 @@ function printModel(order, products, settings) {
     order.address?.line1, order.address?.line2, [order.address?.locality, order.address?.postal_code].filter(Boolean).join(' '),
   ]) || 'Not recorded' });
   details.push({ title: 'Instructions', value: text(order.instructions) || 'None' });
-  if (pickup && (order.pickup_instructions ?? settings.pickup_instructions)) {
-    details.push({ title: 'Pickup instructions', value: order.pickup_instructions ?? settings.pickup_instructions });
-  }
   const status = [order.refund_label ? 'Refund label' : '', ['cancelled', 'expired'].includes(order.fulfillment_status) ? label(order.fulfillment_status) : '', `Payment: ${label(order.payment_status) || 'Not recorded'}`].filter(Boolean).join(' | ');
   return {
     shop: text(settings.shop_name) || 'The Little Baker Kitchen', reference: text(order.reference) || 'Order',
@@ -66,7 +63,7 @@ function element(doc, html) {
 }
 
 function createSlip(doc, model) {
-  return element(doc, `<article class="slip">
+  return element(doc, `<article class="slip" data-order-reference="${esc(model.reference)}">
     <header class="slip-header"><p class="slip-brand">${esc(model.shop)}</p><h1 class="slip-reference">${esc(model.reference)}</h1>
       <p class="slip-method">${esc(model.method.toUpperCase())}</p><p class="slip-date">${esc(model.date)}${model.window ? ` | ${esc(model.window)}` : ''}</p><p class="slip-state">${esc(model.status)}</p></header>
     <div class="slip-body"><div class="slip-left"><h2 class="slip-heading slip-item-heading">Items to prepare</h2><div class="slip-items"></div></div>
@@ -117,7 +114,7 @@ function appendText(pages, getPage, selector, make, value) {
       block.remove();
       if (fit) low = middle; else high = middle - 1;
     }
-    if (!low) throw new Error('These order details cannot fit on an A6 slip. Please check the order details and try again.');
+    if (!low) throw new Error('These order details cannot fit on a 5 × 4 inch slip. Please check the order details and try again.');
     const boundary = remaining.lastIndexOf(' ', low - 1);
     if (boundary > low / 2) low = boundary + 1;
     // Do not split a Unicode surrogate pair at the page boundary.
@@ -160,7 +157,7 @@ function paginate(doc, model) {
     page.querySelector('.slip-item-heading').textContent = cards.length ? `Items ${Number(cards[0].dataset.itemIndex) + 1}-${Number(cards.at(-1).dataset.itemIndex) + 1} of ${model.items.length}` : 'Order details';
     if (index < pages.length - 1) page.querySelector('.slip-item-heading').append(` | Totals on slip ${pages.length}`);
     if (!fits(page.querySelector('.slip-left')) || !fits(page.querySelector('.slip-details')) || page.scrollHeight > page.clientHeight + 1) {
-      throw new Error('These order details cannot fit on an A6 slip. Please check the order details and try again.');
+      throw new Error('These order details cannot fit on a 5 × 4 inch slip. Please check the order details and try again.');
     }
   });
   return pages;
@@ -180,45 +177,89 @@ async function readyImages(doc) {
   })));
 }
 
-export async function printOrderSlips(order, { products = [], settings = {} } = {}) {
-  const preview = window.open(previewUrl, '_blank');
-  if (!preview) throw new Error('Allow pop-ups for this site, then select Print summary again.');
-  const model = printModel(order, products, settings);
-  // The preview has its own document and print styles. No order data is put in
-  // its URL, storage, or a server request; only the authorized opener supplies it.
-  await new Promise((resolve, reject) => {
+function waitForPreview(preview) {
+  return new Promise((resolve, reject) => {
     const start = Date.now();
     const timer = setInterval(() => {
-      if (preview.closed) { clearInterval(timer); resolve(); return; }
-      if (preview.location.href === previewUrl && preview.document.readyState === 'complete') {
-        clearInterval(timer); resolve();
-      } else if (Date.now() - start > 10000) {
-        clearInterval(timer); reject(new Error('The print preview could not load. Close it and select Print summary again.'));
+      try {
+        if (preview.closed) { clearInterval(timer); resolve(null); return; }
+        if (preview.location.href === previewUrl && preview.document.readyState === 'complete') {
+          clearInterval(timer); resolve(preview.document);
+        } else if (Date.now() - start > 10000) {
+          throw new Error('The print preview could not load. Close it and try printing again.');
+        }
+      } catch (error) {
+        clearInterval(timer); reject(error);
       }
     }, 50);
   });
-  if (preview.closed) return;
-  const doc = preview.document;
-  doc.title = `${model.reference} - order slips`;
-  const button = doc.querySelector('.print-slips'), status = doc.querySelector('[role="status"]');
-  status.textContent = 'Preparing order slips…';
-  doc.querySelector('.close-preview').addEventListener('click', () => preview.close());
-  button.addEventListener('click', () => { preview.focus(); preview.print(); });
+}
+
+function arrangeSheets(doc, slips, paper) {
+  const host = doc.querySelector('#slips');
+  host.replaceChildren();
+  doc.querySelector('#paper-style').textContent = `@page{size:${paper === 'letter' ? 'Letter' : 'A4'} landscape;margin:0}`;
+  for (let index = 0; index < slips.length; index += 4) {
+    const sheet = doc.createElement('section');
+    sheet.className = 'print-sheet';
+    sheet.dataset.paper = paper;
+    sheet.setAttribute('aria-label', `Sheet ${index / 4 + 1}`);
+    sheet.append(...slips.slice(index, index + 4));
+    host.append(sheet);
+  }
+}
+
+// Opening the tab happens synchronously on the click, before optional batch
+// loading. This avoids popup blocking while each selected saved order is fetched.
+export async function printOrderSlips(source, { products = [], settings = {} } = {}) {
+  const preview = window.open(previewUrl, '_blank');
+  if (!preview) throw new Error('Allow pop-ups for this site, then try printing again.');
+  let doc;
   try {
+    doc = await waitForPreview(preview);
+    if (!doc) return;
+    const button = doc.querySelector('.print-slips'), status = doc.querySelector('[role="status"]');
+    const paperChoice = doc.querySelector('#paper-size');
+    if (!button || !status || !paperChoice) throw new Error('The print preview could not load. Close it and try printing again.');
+    doc.querySelector('.close-preview').addEventListener('click', () => preview.close());
     if (preview.getComputedStyle(doc.documentElement).getPropertyValue('--order-slip-layout').trim() !== 'ready') {
       throw new Error('The print layout could not load. Close this preview and try again.');
     }
+    status.textContent = 'Loading selected orders…';
+    const loaded = typeof source === 'function' ? await source() : source;
+    const orders = Array.isArray(loaded) ? loaded : [loaded];
+    if (!orders.length || orders.some(order => !order)) throw new Error('No orders are available to print. Select your orders and try again.');
     if (preview.closed) return;
-    const pages = paginate(doc, model);
+    const models = orders.map(order => printModel(order, products, settings));
+    doc.title = `${models.length === 1 ? models[0].reference : `${models.length} orders`} - preparation slips`;
+    status.textContent = 'Preparing order slips…';
+    const slips = models.flatMap(model => paginate(doc, model));
     await readyImages(doc);
     if (preview.closed) return;
-    const resize = () => doc.documentElement.style.setProperty('--preview-scale', Math.min(1, (preview.innerWidth - 24) / (148 * 96 / 25.4)));
-    resize(); preview.addEventListener('resize', resize);
-    status.textContent = `${pages.length} A6 landscape slip${pages.length === 1 ? '' : 's'} (148 × 105 mm). Print at Actual size / 100%, with browser headers and footers off.`;
+    try { if (localStorage.getItem('order-slip-paper') === 'letter') paperChoice.value = 'letter'; } catch { /* Paper choice remains available without storage. */ }
+    const resize = () => doc.documentElement.style.setProperty('--preview-scale', Math.min(1, Math.max(.1, (preview.innerWidth - 24) / ((paperChoice.value === 'letter' ? 279.4 : 297) * 96 / 25.4))));
+    const arrange = () => {
+      const paper = paperChoice.value === 'letter' ? 'letter' : 'a4';
+      arrangeSheets(doc, slips, paper); resize();
+      const count = Math.ceil(slips.length / 4);
+      status.textContent = `${orders.length} order${orders.length === 1 ? '' : 's'} · ${slips.length} slip${slips.length === 1 ? '' : 's'} · ${count} sheet${count === 1 ? '' : 's'}. Slips are 5″ wide × 4″ high. Choose matching paper in the print dialog, landscape, Actual size / 100%, with headers and footers off.`;
+    };
+    arrange(); preview.addEventListener('resize', resize);
+    paperChoice.addEventListener('change', () => {
+      arrange();
+      try { localStorage.setItem('order-slip-paper', paperChoice.value); } catch { /* Preferences are optional. */ }
+    });
+    button.textContent = `Print ${orders.length === 1 ? 'order' : `${orders.length} orders`}`;
     button.disabled = false;
-    preview.focus(); preview.print();
+    paperChoice.disabled = false;
+    button.addEventListener('click', () => { preview.focus(); preview.print(); });
+    preview.focus();
   } catch (error) {
-    if (!preview.closed) { doc.querySelector('#slips').replaceChildren(); status.textContent = error.message; }
+    if (!preview.closed && doc) {
+      doc.querySelector('#slips')?.replaceChildren();
+      const status = doc.querySelector('[role="status"]');
+      if (status) status.textContent = error.message;
+    }
     throw error;
   }
 }
