@@ -73,9 +73,23 @@ export function mountNewsletterForms(scope = document) {
       const label = button.textContent; button.textContent = 'Subscribing…';
       try {
         await request('subscribe', { email: String(values.get('email') || '').trim(), source: form.dataset.source || 'homepage', website: String(values.get('website') || '') });
-        status(message, 'You’re subscribed! Look out for a welcome email from TLB.');
         rememberPreference('subscribed');
-        button.textContent = 'Subscribed';
+        const dialog = form.closest('#newsletter-dialog');
+        if (dialog) {
+          dialog.querySelector('#newsletter-popup-title').textContent = 'You’re in!';
+          const copy = dialog.querySelector('#newsletter-popup-copy');
+          copy.setAttribute('role', 'status');
+          copy.textContent = 'Welcome to the TLB newsletter! Look out for new treats, seasonal menus, and special offers from our kitchen.';
+          form.remove();
+          dialog.querySelector('.newsletter-close').setAttribute('aria-label', 'Close newsletter welcome');
+          const close = dialog.querySelector('[data-newsletter-dismiss]');
+          close.textContent = 'Close';
+          close.classList.remove('newsletter-button-secondary');
+          if (dialog.open) close.focus({ preventScroll: true });
+        } else {
+          status(message, 'You’re subscribed! Look out for a welcome email from TLB.');
+          button.textContent = 'Subscribed';
+        }
       } catch (error) {
         status(message, error.message || 'We could not complete your signup. Please try again.', true);
         button.disabled = false; button.textContent = label;

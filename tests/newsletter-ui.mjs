@@ -95,8 +95,23 @@ try {
   await f.page.locator('#newsletter-dialog').waitFor({state:'visible'});
   await f.page.locator('#newsletter-popup-email').fill('subscriber@example.test');
   await f.page.locator('#newsletter-dialog button[type=submit]').click();
-  await f.page.getByText('Subscribed',{exact:true}).waitFor();
+  await f.page.getByRole('heading',{name:'You’re in!',exact:true}).waitFor();
+  assert.equal(await f.page.locator('#newsletter-dialog form').count(),0,'Success replaces the signup form');
+  assert.equal(await f.page.getByRole('button',{name:'Maybe later',exact:true}).count(),0,'The invitation becomes a welcome');
+  assert.equal(await f.page.locator(':focus').textContent(),'Close','Focus moves to the welcome Close button');
+  await f.page.clock.fastForward(15000);
+  assert.equal(await f.page.locator('#newsletter-dialog').isVisible(),true,'Welcome stays open until dismissed');
+  assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true,'Welcome fits mobile width');
+  await f.page.screenshot({path:join(root,'work/newsletter-welcome-mobile.png'),fullPage:true});
   assert.deepEqual(f.state.calls.find(call => call.action === 'subscribe'),{action:'subscribe',email:'subscriber@example.test',source:'shop_popup',website:''});
+  await f.page.getByRole('button',{name:'Close',exact:true}).click();
+  await f.page.locator('#newsletter-dialog').waitFor({state:'detached'});
+  await f.page.reload(); await advance(f.page);
+  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Closing the welcome keeps the once-only invitation dismissed');
+  await f.context.close();
+
+  f = await fixture(); await f.page.goto(origin+'/shop.html'); await advance(f.page);
+  await f.page.locator('#newsletter-dialog').waitFor({state:'visible'});
   await f.page.evaluate(() => document.getElementById('product-dialog').showModal());
   await f.page.locator('#newsletter-dialog').waitFor({state:'detached'});
   assert.equal(await f.page.locator('#product-dialog').isVisible(),true,'Opening a product closes the invitation');
