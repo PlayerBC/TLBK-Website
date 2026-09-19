@@ -785,13 +785,15 @@ async function submitForm(form) {
     }
     case 'inventory': {
       const rows = quantitySaveRows(state.products, state.inventory, state.inventoryDates, state.inventoryDrafts, manilaDate());
-      if (!rows.length) { state.inventoryDrafts = {}; updateInventoryProducts(); toast('Quantities are already up to date.'); break; }
+      const dateCount = state.inventoryDates.length;
+      if (!rows.length) { state.inventoryDrafts = {}; state.inventoryDates = []; render(); toast('Quantities are already up to date.'); break; }
       const controls = [...$$('input, button, textarea', form), ...$$('[data-view]')].filter(control => !control.disabled);
       controls.forEach(control => { control.disabled = true; });
       try {
         state.inventory = await api('save_inventory', { rows });
         state.inventoryDrafts = {};
-        render(); toast(`Quantities saved for ${state.inventoryDates.length} selected date${state.inventoryDates.length === 1 ? '' : 's'}.`);
+        state.inventoryDates = [];
+        render(); toast(`Quantities saved for ${dateCount} selected date${dateCount === 1 ? '' : 's'}.`);
       } finally { controls.forEach(control => { control.disabled = false; }); }
       break;
     }
