@@ -12,6 +12,7 @@
     "test:newsletter": "node --experimental-transform-types --test tests/edge/newsletter.test.mjs && node tests/newsletter-ui.mjs",
     "build": "node scripts/build-static.mjs",
     "test:labels": "node --test tests/product-labels.test.mjs && node tests/ui/product-labels.mjs",
+    "test:product-photos": "node tests/ui/product-photos.mjs",
     "test:checkout": "node --test tests/checkout-fields.test.mjs && node tests/ui/checkout-feedback.mjs",
     "test:delivery-admin": "node --test tests/date-calendar.test.mjs && node tests/ui/delivery-admin.mjs",
     "test:customer-calendar": "node --test tests/customer-calendar.test.mjs && node tests/ui/customer-calendar.mjs",

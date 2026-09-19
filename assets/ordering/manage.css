@@ -110,3 +110,17 @@
 .product-filters input,.product-filters select{min-height:42px}
 .product-filter-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0 18px}
 @media(max-width:760px){.product-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.product-filters .product-search{grid-column:1/-1}}
+
+/* Product photo ordering: pointer dragging and keyboard focus share the tile. */
+.photo-tile .photo-reorder{position:static;display:block;width:100%;height:100%;padding:0;border:0;border-radius:8px;background:transparent;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.photo-tile .photo-reorder img{display:block;pointer-events:none;-webkit-user-drag:none}
+.photo-tile .photo-reorder:disabled{cursor:default;touch-action:auto}
+.photo-tile:focus-within{outline:2px solid var(--caramel);outline-offset:3px}
+.photo-tile .photo-reorder:focus-visible{outline:3px solid var(--caramel);outline-offset:-3px}
+.photo-grip{position:absolute;top:4px;left:4px;padding:1px 5px;border-radius:4px;background:#fffdf3e8;color:var(--ink);font-size:16px;line-height:20px;pointer-events:none}
+.photo-reorder:disabled .photo-grip{display:none}
+.photo-position{position:absolute;bottom:4px;left:4px;padding:3px 6px;border-radius:4px;background:#fffdf3ed;color:var(--ink);font-size:10px;font-weight:700;pointer-events:none}
+.photo-tile .photo-remove{z-index:1;cursor:pointer}
+.photo-tile.photo-dragging{opacity:.35}
+.photo-tile.photo-drop-target{outline:3px solid var(--caramel);outline-offset:3px}
+.photo-drag-preview{position:fixed;z-index:10;border-radius:8px;object-fit:cover;box-shadow:0 8px 25px #0005;pointer-events:none;opacity:.9;cursor:grabbing}

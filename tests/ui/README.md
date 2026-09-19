@@ -22,6 +22,10 @@ Run `npm run test:labels` to check optional labels, saved text and color, and th
 
 `product-labels.mjs` uses the real manager and shop UI with a local mock of the client module. It blocks external requests and does not connect to Supabase, send emails, or change real products. The checks include saving and reopening labels, disabling them without losing their settings, options remaining independent, unsafe saved values, and mobile layout.
 
+## Product photo order
+
+Run `npm run test:product-photos` for native mouse and touch dragging, keyboard movement, save/reopen behavior, unsaved field preservation, upload/remove interactions, cancellation and staff access. The test uses local API/image fixtures and blocks every external request. `PHOTO_TEST_OUTPUT` selects its screenshot/results directory; it defaults to `tests/artifacts/product-photos`. The Playwright and Chromium environment overrides above apply.
+
 ## Checkout feedback regression
 
 Run `npm run test:checkout` for phone-format checks and the isolated checkout browser test. The browser test uses local fixtures and blocks external requests. It covers buyer/recipient phone validation, enabling social usernames only after platform selection, and preserving pickup line breaks on checkout and saved orders. The same Playwright and browser environment overrides above apply.
