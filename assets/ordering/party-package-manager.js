@@ -1,4 +1,4 @@
-import { packageCard, packagePrice, packageEscape as esc, packageInclusions } from './party-packages-view.js';
+import { packageCard, packagePrice, packageEscape as esc, packageInclusions } from './party-packages-view.js?v=details-swipe-1';
 
 export function mountPartyPackageManager(root, { role, connected, api, cartApi }) {
   if (!connected || role !== 'owner') {

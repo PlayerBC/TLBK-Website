@@ -1,6 +1,7 @@
 import { config } from './config.js';
+import { enablePhotoSwipe } from './party-cart-swipe.js?v=details-swipe-1';
 import { packageEscape as esc } from './party-packages-view.js';
-import { startIdleSlideshow } from './party-cart-slideshow.js?v=slide-3s-1';
+import { startIdleSlideshow } from './party-cart-slideshow.js?v=details-swipe-1';
 import { slidingPhoto } from './party-cart-photo-transition.js?v=slide-3s-1';
 
 const root = document.querySelector('[data-cart-gallery]');
@@ -39,6 +40,8 @@ if (root) {
     root.querySelectorAll('[data-cart-light-thumb]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.cartLightThumb) === lightIndex)));
     revealThumb($('[data-cart-light-thumbs]'), $(`[data-cart-light-thumb="${lightIndex}"]`));
   }
+  enablePhotoSwipe($('[data-cart-open]'), step => { show(index + step); slideshow.restart(); });
+  enablePhotoSwipe($('.cart-lightbox-stage'), step => light(lightIndex + step));
   function open() {
     if (!items.length) return;
     returnFocus = document.activeElement; slideshow.suspend(true); dialog.showModal(); light(index, false); $('[data-cart-light-close]').focus();
@@ -76,7 +79,7 @@ if (root) {
       const thumbs = (attribute) => items.map((p, i) => `<button type="button" ${attribute}="${i}" aria-label="View ${esc(caption(i))}" aria-pressed="${i === 0}"><img src="${esc(p.photo_url)}" alt="" loading="lazy" decoding="async"></button>`).join('');
       $('[data-cart-thumbs]').innerHTML = thumbs('data-cart-thumb');
       $('[data-cart-light-thumbs]').innerHTML = thumbs('data-cart-light-thumb');
-      root.querySelectorAll('[data-cart-step],[data-cart-light-step],[data-slideshow-toggle]').forEach(b => { b.hidden = items.length < 2; });
+      root.querySelectorAll('[data-cart-step],[data-cart-light-step]').forEach(b => { b.hidden = items.length < 2; });
       $('[data-cart-open-all]').textContent = `View all ${items.length} photos ↗`;
       viewer.hidden = false; show(0); slideshow.restart();
     } catch {

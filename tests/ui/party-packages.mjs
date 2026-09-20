@@ -112,7 +112,7 @@ try{
   await publicPage.locator('[data-party-cart-item]').first().waitFor();assert.deepEqual(await publicPage.locator('[data-party-cart-item]').allTextContents(),cart.items);
   assert.equal(await publicPage.locator('[data-party-cart-more] a').getAttribute('href'),'pastries.html');
   await publicPage.evaluate(()=>document.fonts.ready);assert.match(await publicPage.locator('.party-card h3').first().evaluate(el=>getComputedStyle(el).fontFamily),/Chelsea Market/);assert.match(await publicPage.locator('.party-price').first().evaluate(el=>getComputedStyle(el).fontFamily),/Chelsea Market/);
-  await publicPage.locator('.party-card').first().locator('summary').first().click();assert.equal(await publicPage.locator('[data-party-results] img').count(),0);assert.equal(await publicPage.evaluate(()=>window.injected),undefined);
+  assert.equal(await publicPage.locator('.party-features details, .party-features summary').count(),0);assert(await publicPage.locator('.party-feature-detail').first().isVisible());assert.equal(await publicPage.locator('[data-party-results] img').count(),0);assert.equal(await publicPage.evaluate(()=>window.injected),undefined);
   assert.equal(await publicPage.locator('.party-inquire').first().getAttribute('href'),'contactus.html');
   assert.match(await publicPage.locator('body').innerText(),/Customize your own cart!/i);
   await publicPage.locator('[data-party-packages]').screenshot({path:join(output,'public-packages.png')});
@@ -137,6 +137,7 @@ try{
   const mobile=await context({mobile:true}),phone=await mobile.newPage();phone.on('dialog',d=>d.accept());await phone.goto(`${origin}/manage.html`);await phone.locator('[data-view="packages"]').click();await phone.locator('[data-party-edit]').first().click();
   assert(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert(await phone.locator('.party-editor').evaluate(el=>el.scrollWidth<=el.clientWidth+1));await phone.screenshot({path:join(output,'editor-mobile.png'),fullPage:true});
   await phone.goto(`${origin}/partycarts.html`);await phone.locator('.party-card').first().waitFor();assert(await phone.locator('[data-party-packages]').evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+  assert.equal((await phone.locator('.cart-showcase-copy h1').innerText()).replace(/\s+/g,' ').trim(),'A cart full of happy moments.');assert(await phone.locator('.party-feature-detail').first().isVisible());
   await phone.locator('[data-party-packages]').screenshot({path:join(output,'public-mobile.png')});
   await page.locator('[data-party-cart]').click();while(await page.locator('[data-feature-remove]').count())await page.locator('[data-feature-remove]').first().click();assert(await page.locator('[data-feature-add]').isEnabled());await page.locator('[data-party-form] button[type="submit"]').click();await page.locator('.party-editor').waitFor({state:'hidden'});
   await publicPage.reload();await publicPage.getByText('Contact us to discuss treats for your custom cart.').waitFor();assert.equal(await publicPage.locator('[data-party-cart-item]').count(),0);

@@ -13,7 +13,7 @@ import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
 import { mountGalleryManager } from './gallery-manager.js';
 import { mountPartyCartPhotos } from './party-cart-photos-manager.js?v=party-gallery-1';
-import { mountPartyPackageManager } from './party-package-manager.js?v=package-delete-1';
+import { mountPartyPackageManager } from './party-package-manager.js?v=details-swipe-1';
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];

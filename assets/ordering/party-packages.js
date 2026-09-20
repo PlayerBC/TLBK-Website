@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { packageCard, packageInclusions, packageEscape } from './party-packages-view.js';
+import { packageCard, packageInclusions, packageEscape } from './party-packages-view.js?v=details-swipe-1';
 
 const root = document.querySelector('[data-party-packages]');
 if (root) {

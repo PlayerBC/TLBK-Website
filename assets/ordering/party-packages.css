@@ -13,10 +13,10 @@
 .party-features{list-style:none;padding:20px 0 0;margin:0 0 25px;border-top:1px solid #e1d6c7;display:grid;gap:18px}
 .party-features li{display:flex;gap:9px;min-width:0}
 .party-features li>div{min-width:0}.party-features li>span{color:#805335;font-size:13px}.party-features strong{font-size:13px;font-weight:600;line-height:1.6}
-.party-features details{margin-top:7px}.party-features summary{font-size:12px;color:#805335;cursor:pointer;text-decoration:underline;text-underline-offset:3px;min-height:24px}.party-features details p{font-size:12px;line-height:1.8;white-space:pre-line;margin:8px 0 0}
+.party-feature-detail{font-size:12px;line-height:1.8;white-space:pre-line;margin:6px 0 0;color:#746053}
 .party-inquire{display:flex;justify-content:space-between;gap:12px;margin-top:auto;padding:13px 16px;border:1px solid #805335;border-radius:8px;color:#805335!important;text-decoration:none!important;font-size:13px;font-weight:700;line-height:1.6}
 .party-card--featured .party-inquire{color:#fff!important;background:#805335}.party-inquire:hover{background:#ead9c6}.party-card--featured .party-inquire:hover{background:#664225}
-.party-inquire:focus-visible,.party-features summary:focus-visible{outline:3px solid #aa7548;outline-offset:4px}
+.party-inquire:focus-visible{outline:3px solid #aa7548;outline-offset:4px}
 .party-inclusions{background:#efe5d5;border-radius:12px;padding:26px 30px;display:flex;gap:30px;align-items:center;margin:24px 0;color:#342923;overflow-wrap:anywhere}
 .party-inclusions>div{flex:0 1 200px;min-width:0}.party-eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:1.3px;margin:0 0 9px;color:#805335}.party-inclusions h2{font:400 23px/1.3 'Chelsea Market',serif;margin:0}
 .party-inclusions ul{flex:1;display:flex;flex-wrap:wrap;list-style:none;padding:0;margin:0;gap:22px}.party-inclusions li{flex:1 1 140px;min-width:0}.party-inclusions strong{font-size:13px;line-height:1.6;display:block}.party-inclusions span{display:block;font-size:11px;line-height:1.6;margin-top:7px}
