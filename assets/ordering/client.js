@@ -116,6 +116,13 @@ export async function galleryApi(action, payload = {}) {
   return data;
 }
 
+export async function partyPackagesApi(action, payload = {}) {
+  const client = await connection();
+  const { data, error } = await client.rpc('party_packages_api', { p_action: action, p_payload: payload });
+  if (error) throw new Error(error.message || 'The party packages could not be updated. Please try again.');
+  return data;
+}
+
 export async function websiteVisitorStats({ signal } = {}) {
   return edge('website-analytics', {}, { signal, timeout: 45_000 });
 }

@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Existing TLB Kitchen website with additive manual-payment ordering draft",
   "scripts": {
+    "test:party-packages": "node tests/backend/run.mjs && node tests/ui/party-packages.mjs",
     "test:galleries": "node --test tests/gallery-import.test.mjs && node tests/backend/run.mjs && node tests/ui/galleries.mjs",
     "dev": "python -m http.server 4173 --bind 127.0.0.1",
     "test": "node --test tests/daily-quantities.test.mjs tests/shop-rules.test.mjs tests/product-labels.test.mjs tests/checkout-fields.test.mjs tests/order-edit-save.test.mjs tests/order-edit-confirmation.test.mjs tests/refund-status.test.mjs tests/date-calendar.test.mjs tests/customer-calendar.test.mjs tests/analytics.test.mjs tests/analytics-view.test.mjs tests/traffic.test.mjs tests/website-visitors.test.mjs && node tests/backend/run.mjs && node tests/edge/run.mjs",
