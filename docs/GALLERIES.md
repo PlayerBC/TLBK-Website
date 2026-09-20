@@ -11,7 +11,9 @@ The owner dashboard has separate **Custom Orders** and **Pastries** galleries. T
 
 JPG, PNG, WebP, AVIF, GIF, BMP and HEIC/HEIF are accepted, up to 25 MB per source. The browser resizes to at most 1600 px on the longest edge and encodes WebP at quality 0.82 before storage. Smaller images aren't enlarged. Animation becomes a still image. HEIC decoding loads pinned `heic2any@0.0.4` only when native decoding fails; unsupported files show a conversion error rather than uploading originals. Files over 60 megapixels are rejected. Saved files must pass the existing server's real JPEG/PNG/WebP byte validation and 5 MB limit. The owner-only public image upload service is shared with shop photos.
 
-Public search uses category, optional name/description and hidden keywords. Accent-insensitive prefix search matches `Pokemon`, `Pokémon`, and `Pika`. All query words must match. The server returns 24 photos per request, with **Load more** until every result is reachable; there is no total-result cap. Keywords are never returned in public API responses. Photos without titles don't receive invented visible titles.
+Custom Orders search uses category, optional name/description and hidden keywords. Accent-insensitive prefix search matches `Pokemon`, `Pokémon`, and `Pika`. All query words must match. The server returns 24 photos per request, with **Load more** until every result is reachable; there is no total-result cap. Keywords are never returned in public API responses. Photos without titles don't receive invented visible titles.
+
+Pastries opens with all published photos grouped beneath category headings, in the saved category order. Its category dropdown filters those sections immediately; there is no search field or Search button. All metadata pages load automatically, while image files load lazily as visitors scroll.
 
 ## MongoDB import
 

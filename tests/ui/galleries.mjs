@@ -19,7 +19,7 @@ function response(action, payload) {
   if (action === 'browse' || action === 'admin_list') {
     const q = (payload.query || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
     const matching = photos.filter(p => p.gallery === payload.gallery && (action !== 'browse' || p.published) && (!payload.category || p.category === payload.category) && (!q || [p.title, p.category, ...p.keywords].join(' ').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes(q)));
-    return { enabled, revision: 1, categories: ['Characters'], total: matching.length, items: matching.slice(payload.offset || 0, (payload.offset || 0) + 24).map(p => action === 'browse' ? { id: p.id, photo_url: p.photo_url, category: p.category, title: p.title, description: p.description } : p) };
+    return { enabled, revision: 1, categories: payload.gallery === 'pastries' ? ['Tiramisu', 'Nori Chips', 'Cookies'] : ['Characters'], total: matching.length, items: matching.slice(payload.offset || 0, (payload.offset || 0) + 24).map(p => action === 'browse' ? { id: p.id, photo_url: p.photo_url, category: p.category, title: p.title, description: p.description } : p) };
   }
   if (action === 'save') {
     const photo = { ...payload.photo, gallery: payload.gallery, id: payload.photo.id || `added-${photos.length}`, revision: (payload.photo.revision || 0) + 1 };
@@ -142,6 +142,37 @@ try {
   await phone.goto(`${origin}/manage.html`); await phone.locator('[data-view="galleries"]').click();
   await phone.locator('[data-gallery-count]').filter({ hasText: '24 of 65' }).waitFor();
   assert(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  // Pastries has category sections with all metadata pages loaded automatically.
+  // Interleave records so section order and lightbox indexing must survive grouping.
+  const pastryPhotos = Array.from({ length: 51 }, (_, index) => ({ id: `pastry-${index}`, gallery: 'pastries', title: `Pastry ${index}`, description: '', category: index % 15 === 0 ? 'Nori Chips' : index % 17 === 0 ? 'Tiramisu' : 'Cookies', keywords: [], photo_url: `${origin}/photos/pastry-${index}.webp`, revision: 1, published: true }));
+  photos.push(...pastryPhotos);
+  const pastryPage = await ctx.newPage();
+  failMore = true;
+  await pastryPage.goto(`${origin}/pastries.html?q=no-matches`);
+  await pastryPage.locator('.portfolio-more').filter({ hasText: 'Try again' }).waitFor();
+  assert.equal(await pastryPage.locator('.portfolio-card').count(), 0);
+  await pastryPage.locator('.portfolio-more').click();
+  await pastryPage.locator('.portfolio-count').filter({ hasText: '51 photos' }).waitFor();
+  assert.equal(await pastryPage.locator('input[type="search"]').count(), 0);
+  assert.equal(await pastryPage.getByRole('button', { name: 'Search', exact: true }).count(), 0);
+  assert.equal(await pastryPage.locator('.portfolio-more').isVisible(), false);
+  assert.equal(await pastryPage.locator('.portfolio-card').count(), 51);
+  assert.deepEqual(await pastryPage.locator('.portfolio-category h2').allTextContents(), ['Tiramisu', 'Nori Chips', 'Cookies']);
+  assert.deepEqual(await pastryPage.locator('.portfolio-category').evaluateAll(sections => sections.map(section => section.querySelectorAll('.portfolio-card').length)), [2, 4, 45]);
+  assert(calls.filter(c => c.payload.gallery === 'pastries' && c.action === 'browse').every(c => !c.payload.query));
+  await pastryPage.locator('.portfolio-category').first().locator('[data-photo]').first().click();
+  assert.equal(await pastryPage.locator('.portfolio-lightbox img').getAttribute('src'), `${origin}/photos/pastry-17.webp`);
+  await pastryPage.keyboard.press('Escape');
+  await pastryPage.screenshot({ path: join(output, 'pastries-desktop.png') });
+  await pastryPage.locator('.portfolio-controls select').selectOption('Nori Chips');
+  await pastryPage.locator('.portfolio-count').filter({ hasText: '4 photos' }).waitFor();
+  assert.deepEqual(await pastryPage.locator('.portfolio-category h2').allTextContents(), ['Nori Chips']);
+  await pastryPage.locator('.portfolio-controls select').selectOption('');
+  await pastryPage.locator('.portfolio-count').filter({ hasText: '51 photos' }).waitFor();
+  await phone.goto(`${origin}/pastries.html`);
+  await phone.locator('.portfolio-count').filter({ hasText: '51 photos' }).waitFor();
+  assert(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  await phone.screenshot({ path: join(output, 'pastries-mobile.png') });
   assert.deepEqual(errors, []);
-  console.log('PASS gallery uploads, WebP dimensions/bytes, optional fields, upload queue, edit visibility, idempotent imports, role UI, all search results, retry, stale requests, lightbox and mobile layouts');
+  console.log('PASS gallery uploads, WebP dimensions/bytes, optional fields, upload queue, edit visibility, idempotent imports, role UI, all search results, retry, stale requests, lightbox, grouped pastries without search, all pastry pages, category filtering and mobile layouts');
 } finally { await browser.close(); }
