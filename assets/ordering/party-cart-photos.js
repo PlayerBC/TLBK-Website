@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { packageEscape as esc } from './party-packages-view.js';
-import { startIdleSlideshow } from './party-cart-slideshow.js';
+import { startIdleSlideshow } from './party-cart-slideshow.js?v=slide-3s-1';
+import { slidingPhoto } from './party-cart-photo-transition.js?v=slide-3s-1';
 
 const root = document.querySelector('[data-cart-gallery]');
 if (root) {
@@ -8,6 +9,8 @@ if (root) {
   const $ = selector => root.querySelector(selector);
   const status = $('[data-cart-gallery-status]'), viewer = $('[data-cart-viewer]'), image = $('[data-cart-featured]');
   const dialog = $('[data-cart-lightbox]');
+  const photoTransition = slidingPhoto(image, $('[data-cart-image-error]'));
+  const lightTransition = slidingPhoto($('[data-cart-light-image]'), $('[data-cart-light-error]'));
   const caption = i => items[i]?.caption || `Party cart photo ${i + 1}`;
   const cyclic = n => (n + items.length) % items.length;
   const slideshow = startIdleSlideshow(root, { next: () => show(index + 1), count: () => items.length });
@@ -20,28 +23,27 @@ if (root) {
   }
   function show(next) {
     if (!items.length) return;
-    index = cyclic(next); image.hidden = false; $('[data-cart-image-error]').hidden = true;
-    image.src = items[index].photo_url; image.alt = caption(index);
+    const direction = next < index ? -1 : 1;
+    index = cyclic(next);
+    void photoTransition.show(items[index].photo_url, caption(index), { direction });
     $('[data-cart-count]').textContent = `${index + 1} / ${items.length}`;
     $('[data-cart-caption]').textContent = items[index].caption;
     root.querySelectorAll('[data-cart-thumb]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.cartThumb) === index)));
     revealThumb($('[data-cart-thumbs]'), $(`[data-cart-thumb="${index}"]`));
   }
-  image.addEventListener('error', () => { image.hidden = true; $('[data-cart-image-error]').hidden = false; });
-  function light(next) {
+  function light(next, animate = true) {
+    const direction = next < lightIndex ? -1 : 1;
     lightIndex = cyclic(next);
-    const img = $('[data-cart-light-image]'); img.hidden = false; $('[data-cart-light-error]').hidden = true;
-    img.src = items[lightIndex].photo_url; img.alt = caption(lightIndex);
+    void lightTransition.show(items[lightIndex].photo_url, caption(lightIndex), { direction, animate });
     $('[data-cart-light-caption]').textContent = `${caption(lightIndex)} · ${lightIndex + 1} / ${items.length}`;
     root.querySelectorAll('[data-cart-light-thumb]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.cartLightThumb) === lightIndex)));
     revealThumb($('[data-cart-light-thumbs]'), $(`[data-cart-light-thumb="${lightIndex}"]`));
   }
-  $('[data-cart-light-image]').addEventListener('error', event => { event.target.hidden = true; $('[data-cart-light-error]').hidden = false; });
   function open() {
     if (!items.length) return;
-    returnFocus = document.activeElement; slideshow.suspend(true); dialog.showModal(); light(index); $('[data-cart-light-close]').focus();
+    returnFocus = document.activeElement; slideshow.suspend(true); dialog.showModal(); light(index, false); $('[data-cart-light-close]').focus();
   }
-  dialog.addEventListener('close', () => { returnFocus?.focus({ preventScroll: true }); slideshow.suspend(false); });
+  dialog.addEventListener('close', () => { lightTransition.clear(); returnFocus?.focus({ preventScroll: true }); slideshow.suspend(false); });
   dialog.addEventListener('keydown', event => {
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); light(lightIndex + (event.key === 'ArrowRight' ? 1 : -1)); }
   });
@@ -59,6 +61,7 @@ if (root) {
   });
   async function load() {
     $('[data-cart-gallery-retry]').hidden = true; viewer.hidden = true; items = [];
+    photoTransition.clear(); lightTransition.clear();
     status.textContent = 'Loading party cart photos…'; slideshow.restart();
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 20000);
     try {

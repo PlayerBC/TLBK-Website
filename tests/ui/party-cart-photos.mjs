@@ -12,6 +12,7 @@ const client = await readFile(join(root, 'assets/ordering/client.js'), 'utf8');
 const helpers = client.slice(client.indexOf('export function money('));
 const photoPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZfoAAAAASUVORK5CYII=', 'base64');
 let data = { items: structuredClone(seed), revision: 1 }, failSave = false, failBrowse = false, holdUpload;
+const imageWaits = new Map();
 const calls = [], uploads = [], errors = [];
 const packageData = { items: [{ id: 'package-1', name: 'Package 1', subtitle: 'Cookie A La Mode', price_cents: 900000, badge: '', features: [{label:'50 Cookie A La Mode',detail:'Classic Choco Chip Cookie topped w/ Ice Cream'}], published: true, sort_order: 1, revision: 1, created_at:'2026-09-20' }], settings: { inclusions: [{label:'4 Hours Duration',detail:''}], revision:1 } };
 function response(action, payload={}) {
@@ -38,6 +39,7 @@ async function context({role='owner',mobile=false,reducedMotion='no-preference'}
     const u=new URL(route.request().url());
     if(u.pathname==='/test-upload'){
       uploads.push(route.request().postDataJSON());if(holdUpload)await holdUpload;
+const imageWaits = new Map();
       return route.fulfill({contentType:'application/json',body:JSON.stringify({url:`https://aulhqofjjckwwjmdvqgi.supabase.co/storage/v1/object/public/product-images/11111111-1111-4111-8111-111111111111/${String(uploads.length).padStart(8,'0')}-1111-4111-8111-111111111111.webp`})});
     }
     if(u.pathname==='/test-photos'||u.pathname==='/rest/v1/rpc/party_cart_photos_api'){
@@ -49,6 +51,8 @@ async function context({role='owner',mobile=false,reducedMotion='no-preference'}
     if(u.pathname==='/rest/v1/rpc/party_cart_items_api')return route.fulfill({contentType:'application/json',body:JSON.stringify({items:['Cookie A La Mode','Nori Chips Cups']})});
     if(u.pathname.startsWith('/storage/v1/object/public/product-images/'))return route.fulfill({contentType:'image/png',body:photoPng});
     if(u.origin!==origin)return route.abort();
+    if(imageWaits.has(u.pathname))await imageWaits.get(u.pathname);
+    if(u.pathname.endsWith('/broken-photo.jpg'))return route.fulfill({status:404,body:'Missing photo'});
     if(u.pathname==='/assets/ordering/client.js')return route.fulfill({contentType:'text/javascript',body:mock});
     if(/\/assets\/ordering\/(traffic|newsletter)\.js/.test(u.pathname))return route.fulfill({contentType:'text/javascript',body:''});
     const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.woff2':'font/woff2'};
@@ -74,20 +78,49 @@ try{
   const ctx=await context(),page=await frozenPage(ctx);await page.goto(origin+'/partycarts.html');await page.locator('[data-cart-thumb]').first().waitFor();
   assert.equal(await page.locator('[data-cart-thumb]').count(),17);assert.equal(await count(page),'1 / 17');
   await page.evaluate(()=>document.fonts.ready);await page.locator('[data-cart-featured]').evaluate(img=>img.decode());await page.screenshot({path:join(output,'public-desktop.png')});
-  await page.clock.runFor(3999);assert.equal(await count(page),'1 / 17');await page.clock.runFor(1);assert.equal(await count(page),'2 / 17');
-  for(let i=0;i<16;i++)await page.clock.runFor(4000);assert.equal(await count(page),'1 / 17');
-  await page.locator('[data-cart-gallery]').dispatchEvent('pointerenter',{pointerType:'mouse'});await page.clock.runFor(8000);assert.equal(await count(page),'1 / 17');
-  await page.locator('[data-cart-gallery]').dispatchEvent('pointerleave');await page.clock.runFor(3000);await page.locator('body').dispatchEvent('pointermove');await page.clock.runFor(3999);assert.equal(await count(page),'1 / 17');await page.clock.runFor(1);assert.equal(await count(page),'2 / 17');
+  await page.clock.runFor(2999);assert.equal(await count(page),'1 / 17');await page.clock.runFor(1);assert.equal(await count(page),'2 / 17');
+  for(let i=0;i<16;i++)await page.clock.runFor(3000);assert.equal(await count(page),'1 / 17');
+  await page.locator('[data-cart-gallery]').dispatchEvent('pointerenter',{pointerType:'mouse'});await page.clock.runFor(3000);assert.equal(await count(page),'2 / 17');
+  await page.clock.runFor(2000);await page.locator('body').dispatchEvent('pointermove');await page.clock.runFor(2999);assert.equal(await count(page),'2 / 17');await page.clock.runFor(1);assert.equal(await count(page),'3 / 17');
+  await page.locator('[data-cart-thumb="1"]').click();assert.equal(await count(page),'2 / 17');
   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});await page.clock.runFor(12000);assert.equal(await count(page),'2 / 17');
-  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});await page.clock.runFor(4000);assert.equal(await count(page),'3 / 17');
+  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});await page.clock.runFor(3000);assert.equal(await count(page),'3 / 17');
   await page.locator('[data-slideshow-toggle]').click();await page.clock.runFor(8000);assert.equal(await count(page),'3 / 17');
-  await page.locator('[data-slideshow-toggle]').click();await page.clock.runFor(4000);assert.equal(await count(page),'4 / 17');
+  await page.locator('[data-slideshow-toggle]').click();await page.clock.runFor(3000);assert.equal(await count(page),'4 / 17');
+  await page.locator('[data-cart-step="1"]').click();assert.equal(await count(page),'5 / 17');
+  assert(await page.locator('[data-cart-step="1"]').evaluate(el=>el===document.activeElement && el.matches(':hover')));
+  await page.clock.runFor(2999);assert.equal(await count(page),'5 / 17');await page.clock.runFor(1);assert.equal(await count(page),'6 / 17');
+  await page.locator('[data-cart-thumb="3"]').click();await page.clock.runFor(3000);assert.equal(await count(page),'5 / 17');
+  await page.locator('[data-cart-step="1"]').focus();await page.keyboard.press('Enter');assert.equal(await count(page),'6 / 17');await page.clock.runFor(3000);assert.equal(await count(page),'7 / 17');
   await page.locator('[data-cart-thumb="16"]').click();await page.locator('[data-cart-step="1"]').click();assert.equal(await count(page),'1 / 17');
   await page.locator('[data-cart-open-all]').click();await page.clock.runFor(8000);assert.equal(await count(page),'1 / 17');
   await page.locator('[data-cart-light-step="-1"]').click();assert.match(await page.locator('[data-cart-light-caption]').innerText(),/17 \/ 17/);await page.keyboard.press('Escape');
-  assert(!(await page.locator('[data-cart-lightbox]').isVisible()));
+  assert(!(await page.locator('[data-cart-lightbox]').isVisible()));await page.clock.runFor(3000);assert.equal(await count(page),'2 / 17');
   const reduced=await context({reducedMotion:'reduce'}),reducedPage=await frozenPage(reduced);await reducedPage.goto(origin+'/partycarts.html');await reducedPage.locator('[data-cart-thumb]').first().waitFor();await reducedPage.clock.runFor(12000);assert.equal(await count(reducedPage),'1 / 17');assert.equal(await reducedPage.locator('[data-slideshow-toggle]').innerText(),'Play slideshow');
-  console.log('PASS 4-second idle advance, automatic/manual wrap, user activity, hover, hidden tab, pause/play, enlarged gallery, reduced motion.');
+  console.log('PASS 3-second idle advance, automatic/manual wrap, user activity, hover, hidden tab, pause/play, enlarged gallery, reduced motion.');
+  // Use a real browser animation clock to inspect the slide, separate from the
+  // virtual idle timer checks above. Finish before the owner-management fixtures.
+  const motionPage=await ctx.newPage();await motionPage.goto(origin+'/partycarts.html');await motionPage.locator('[data-cart-featured][src]').waitFor();
+  await motionPage.locator('[data-slideshow-toggle]').click();
+  await motionPage.locator('[data-cart-step="1"]').click();await motionPage.locator('.cart-photo-outgoing').waitFor();
+  const forward=await motionPage.locator('[data-cart-featured]').evaluate(el=>el.getAnimations().map(a=>({duration:a.effect.getTiming().duration,frames:a.effect.getKeyframes().map(k=>k.transform)})));
+  assert.equal(forward[0].duration,600);assert.deepEqual(forward[0].frames,['translateX(100%)','translateX(0px)']);
+  await motionPage.locator('.cart-photo-outgoing').waitFor({state:'detached'});
+  await motionPage.locator('[data-cart-step="-1"]').click();await motionPage.locator('.cart-photo-outgoing').waitFor();
+  assert.equal(await motionPage.locator('[data-cart-featured]').evaluate(el=>el.getAnimations()[0].effect.getKeyframes()[0].transform),'translateX(-100%)');
+  await motionPage.locator('.cart-photo-outgoing').waitFor({state:'detached'});
+  await motionPage.locator('[data-cart-step="1"]').click();await motionPage.locator('[data-cart-step="1"]').click();await motionPage.locator('[data-cart-step="1"]').click();
+  await motionPage.locator(`[data-cart-featured][src="${seed[3].photo_url}"]`).waitFor();await motionPage.locator('.cart-photo-outgoing').waitFor({state:'detached'});assert.equal(await count(motionPage),'4 / 17');
+  await motionPage.locator('[data-cart-open-all]').click();await motionPage.locator('[data-cart-light-image][src]').waitFor();await motionPage.locator('[data-cart-light-step="1"]').click();await motionPage.locator('[data-cart-lightbox] .cart-photo-outgoing').waitFor();await motionPage.locator('[data-cart-lightbox] .cart-photo-outgoing').waitFor({state:'detached'});await motionPage.keyboard.press('Escape');
+  await reducedPage.locator('[data-cart-step="1"]').click();await reducedPage.locator(`[data-cart-featured][src="${seed[1].photo_url}"]`).waitFor();assert.equal(await reducedPage.locator('.cart-photo-outgoing').count(),0);assert.equal(await reducedPage.locator('[data-cart-featured]').evaluate(el=>el.getAnimations().length),0);
+  const originalData=structuredClone(data);let releasePhoto;imageWaits.set('/assets/partycart/slow-photo.jpg',new Promise(resolve=>{releasePhoto=resolve;}));
+  data={items:[seed[0],{...seed[1],photo_url:'assets/partycart/slow-photo.jpg'},seed[2],{...seed[3],photo_url:'assets/partycart/broken-photo.jpg'}],revision:1};
+  const slowPage=await ctx.newPage();await slowPage.goto(origin+'/partycarts.html',{waitUntil:'domcontentloaded'});await slowPage.locator('[data-cart-featured][src]').waitFor();await slowPage.locator('[data-slideshow-toggle]').click();
+  await slowPage.locator('[data-cart-step="1"]').click();assert.equal(await slowPage.locator('[data-cart-featured]').getAttribute('src'),seed[0].photo_url);
+  await slowPage.locator('[data-cart-step="1"]').click();await slowPage.locator(`[data-cart-featured][src="${seed[2].photo_url}"]`).waitFor();releasePhoto();imageWaits.clear();await slowPage.locator('.cart-photo-outgoing').waitFor({state:'detached'});assert.equal(await slowPage.locator('[data-cart-featured]').getAttribute('src'),seed[2].photo_url);
+  await slowPage.locator('[data-cart-step="1"]').click();await slowPage.locator('[data-cart-image-error]:not([hidden])').waitFor();await slowPage.locator('[data-cart-step="1"]').click();await slowPage.locator(`[data-cart-featured][src="${seed[0].photo_url}"]:not([hidden])`).waitFor();
+  data=originalData;await slowPage.close();await motionPage.close();
+  console.log('PASS 600ms forward/backward and enlarged-photo slides, rapid-click latest selection, slow-image race, decode failure recovery, and reduced-motion instant changes.');
   const admin=await ctx.newPage();let accept=true;admin.on('dialog',d=>accept?d.accept():d.dismiss());await admin.goto(origin+'/manage.html#packages');await admin.locator('[data-cart-photo-caption]').first().waitFor();assert.equal(await admin.locator('.cart-photo-card').count(),17);
   await admin.locator('#party-cart-photo-manager h2').evaluate(el=>el.scrollIntoView({block:'start'}));await admin.screenshot({path:join(output,'admin-desktop.png')});
   const original=await admin.locator('[data-photo-move] img').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('src')));
@@ -113,7 +146,7 @@ try{
   await page.reload();await page.locator('[data-cart-thumb]').first().waitFor();assert.equal(await page.locator('[data-cart-thumb]').count(),16);assert.equal(await page.locator('[data-cart-caption] img').count(),0);assert.match(await page.locator('[data-cart-caption]').innerText(),/Updated <img/);
   const mobile=await context({mobile:true}),phone=await mobile.newPage();phone.on('dialog',d=>d.accept());await phone.goto(origin+'/manage.html#packages');await phone.locator('[data-cart-photo-caption]').first().waitFor();await drag(phone,1,0,true);assert.equal(await phone.locator('[data-photo-move="0"] img').getAttribute('src'),data.items[1].photo_url);assert(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await phone.locator('[data-cart-photo-caption="0"]').fill('Draft caption');await phone.screenshot({path:join(output,'admin-mobile.png')});await phone.locator('[data-cart-photo-reset]').click();
-  await phone.goto(origin+'/partycarts.html');await phone.locator('[data-cart-thumb]').first().waitFor();assert(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await phone.screenshot({path:join(output,'public-mobile.png'),fullPage:true});
+  await phone.clock.install({time:new Date('2026-09-21T00:00:00Z')});await phone.clock.pauseAt(new Date('2026-09-21T00:00:01Z'));await phone.goto(origin+'/partycarts.html');await phone.locator('[data-cart-thumb]').first().waitFor();assert(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await phone.screenshot({path:join(output,'public-mobile.png'),fullPage:true});await phone.locator('[data-cart-step="1"]').tap();assert.equal(await count(phone),'2 / 16');await phone.clock.runFor(3000);assert.equal(await count(phone),'3 / 16');
   const staff=await context({role:'staff'}),staffPage=await staff.newPage(),reads=calls.filter(c=>c.action==='admin_get').length;await staffPage.goto(origin+'/manage.html#packages');await staffPage.getByText('Sign in with the owner account to add or edit party packages.').waitFor();assert.equal(await staffPage.locator('[data-cart-photo-upload]').count(),0);assert.equal(calls.filter(c=>c.action==='admin_get').length,reads);
   failBrowse=true;await page.reload();await page.locator('[data-cart-gallery-retry]:not([hidden])').waitFor();await page.locator('[data-cart-gallery-retry]').click();await page.locator('[data-cart-thumb]').first().waitFor();
   data={items:[seed[0]],revision:data.revision+1};await page.reload();await page.locator('[data-cart-thumb]').first().waitFor();assert(await page.locator('[data-slideshow-toggle]').isHidden());await page.clock.runFor(12000);assert.equal(await count(page),'1 / 1');
