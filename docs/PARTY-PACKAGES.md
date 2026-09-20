@@ -12,4 +12,18 @@ The private `tlb.party_packages` and `tlb.party_package_settings` tables have RL
 
 Run the existing backend suite and `node tests/ui/party-packages.mjs`. The browser suite uses fixture data and mock authentication; it does not mutate production. `PGLITE_PACKAGE_ROOT`, `PLAYWRIGHT_PACKAGE_ROOT`, and `BROWSER_EXECUTABLE_PATH` can point to external test dependencies. Screenshots go under ignored `test-results/party-packages`.
 
+## Party cart photos
+
+The public page uses the approved split layout: introductory text beside a full-photo viewer and thumbnail strip. All 17 original photos are seeded by `20260920165643_party_cart_photos.sql`, with the cart photo from the approved preview first. Header, footer, package details, original font, and custom cart section remain in place.
+
+The slideshow advances every **4 seconds** while idle and wraps from the last image to the first. Activity restarts the idle timer; hover, keyboard focus, an open enlarged gallery, hidden tabs, and an offscreen viewer pause automatic playback. Pause/Play lets visitors control it. Reduced-motion visitors start paused and can opt into playback. Automatic changes scroll only the thumbnail strip, never the page.
+
+Owners use **Dashboard → Party packages → Party cart photos** to upload several files, drag with mouse/touch, reorder with arrow keys, replace images, edit optional captions, hide photos, or remove them. **Save photos** publishes the complete order atomically; **Reset changes** restores the last saved gallery. Navigation warns about drafts and waits for uploads/saves. Failed saves retain drafts and use the same retry ID.
+
+Uploads reuse the existing browser image converter and verified-owner upload endpoint. Supported JPG, PNG, WebP, AVIF, GIF, BMP, and HEIC files (up to 25 MB each) become WebP at most 1600 px and 5 MB before storage. Animated files become a still frame. Unsupported or corrupt files show an error. Existing repository photos keep their original URLs. Removing a photo removes its gallery entry; shared public storage objects are not physically deleted.
+
+The new `tlb.party_cart_gallery` table is private, with RLS and no browser grants. `party_cart_photos_api` exposes only visible photo IDs, URLs, and captions publicly; every draft/save operation requires a verified owner. Revision checks prevent another browser from overwriting a newer order. Apply this migration before publishing the new client files. It does not alter existing packages, customization items, gallery portfolios, shop products, or orders.
+
+Run `node tests/ui/party-cart-photos.mjs` for the 4-second loop, idle/pause/reduced-motion behavior, WebP resizing, owner management, retry, touch/keyboard ordering, and mobile checks. It uses browser fixtures only. Optionally set `PARTY_PHOTO_ASSETS_ROOT` to a full repository asset checkout for screenshots with the original photographs.
+
 The public page shows an explicit retry state on a fetch failure rather than outdated hardcoded prices. Hiding every package shows a contact prompt. The photo carousel and customization section remain intact.

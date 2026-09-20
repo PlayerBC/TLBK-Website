@@ -1,4 +1,4 @@
-import { api, auth, ready, configured, money, escapeHtml, manilaDate, formatDate, toast, upload, websiteVisitorStats } from './client.js?v=cart-items-1';
+import { api, auth, ready, configured, money, escapeHtml, manilaDate, formatDate, toast, upload, websiteVisitorStats } from './client.js?v=party-gallery-1';
 import { prepareOrderSave, normalizeOrderEditReason } from './order-edit-save.js?v=custom-confirmation-1';
 import { confirmOrderTotalChange } from './order-edit-confirmation.js?v=custom-confirmation-1';
 import { socialContactMessage } from './checkout-fields.js?v=social-contact-1';
@@ -12,6 +12,7 @@ import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-me
 import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
 import { mountGalleryManager } from './gallery-manager.js';
+import { mountPartyCartPhotos } from './party-cart-photos-manager.js?v=party-gallery-1';
 import { mountPartyPackageManager } from './party-package-manager.js?v=package-delete-1';
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
@@ -51,7 +52,7 @@ window.addEventListener('pageshow', syncPromoStatuses);
 window.addEventListener('pagehide', () => clearTimeout(promoStatusTimer));
 const modal = $('#admin-dialog');
 window.addEventListener('beforeunload', event => {
-  if ($('#party-package-manager')?.dataset.dirty === 'true' || $('#party-package-manager')?.dataset.busy === 'true') { event.preventDefault(); event.returnValue = ''; }
+  if (['#party-package-manager', '#party-cart-photo-manager'].some(selector => $(selector)?.dataset.dirty === 'true' || $(selector)?.dataset.busy === 'true')) { event.preventDefault(); event.returnValue = ''; }
 });
 bindDateCalendars($('#workspace'));
 const label = value => String(value || '').replaceAll('_', ' ').replace(/^\w/, c => c.toUpperCase());
@@ -127,10 +128,11 @@ async function refresh() {
 }
 function render() {
   $$('.sidebar-link').forEach(button => { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-current', button.dataset.view === state.view ? 'page' : 'false'); });
-  const views = { overview: overviewView, analytics: analyticsView, orders: ordersView, products: productsView, inventory: inventoryView, promos: promosView, settings: settingsView, team: teamView, galleries: () => '<div id="gallery-manager"></div>', packages: () => '<div id="party-package-manager"></div>' };
+  const views = { overview: overviewView, analytics: analyticsView, orders: ordersView, products: productsView, inventory: inventoryView, promos: promosView, settings: settingsView, team: teamView, galleries: () => '<div id="gallery-manager"></div>', packages: () => '<div id="party-package-manager"></div><div id="party-cart-photo-manager"></div>' };
   $('#workspace').innerHTML = setupNotice() + views[state.view]();
-  if (state.view === 'galleries') mountGalleryManager($('#gallery-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=cart-items-1')).galleryApi(...args), upload });
-  if (state.view === 'packages') mountPartyPackageManager($('#party-package-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=cart-items-1')).partyPackagesApi(...args), cartApi: async (...args) => (await import('./client.js?v=cart-items-1')).partyCartItemsApi(...args) });
+  if (state.view === 'galleries') mountGalleryManager($('#gallery-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=party-gallery-1')).galleryApi(...args), upload });
+  if (state.view === 'packages') mountPartyPackageManager($('#party-package-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=party-gallery-1')).partyPackagesApi(...args), cartApi: async (...args) => (await import('./client.js?v=party-gallery-1')).partyCartItemsApi(...args) });
+  if (state.view === 'packages') mountPartyCartPhotos($('#party-cart-photo-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=party-gallery-1')).partyCartPhotosApi(...args), upload });
   syncOrderPrintSelection();
   syncVisitorPolling();
   syncPromoStatuses();
@@ -625,6 +627,8 @@ function exportOrders() {
 document.addEventListener('click', async event => {
   const view = event.target.closest('[data-view]');
   if (view && $('#gallery-manager')?.dataset.busy === 'true') { toast('Please wait for the gallery operation to finish.'); return; }
+  if (view && $('#party-cart-photo-manager')?.dataset.busy === 'true') { toast('Please wait for the photo operation to finish.'); return; }
+  if (view && $('#party-cart-photo-manager')?.dataset.dirty === 'true' && !confirm('Discard your unsaved photo changes?')) return;
   if (view && $('#party-package-manager')?.dataset.busy === 'true') { toast('Please wait for the package operation to finish.'); return; }
   if (view && $('#party-package-manager')?.dataset.dirty === 'true' && !confirm('Discard your unsaved package changes?')) return;
   if (view) { state.view = view.dataset.view; render(); if (state.view === 'analytics' && state.connected) { try { await refresh(); } catch (error) { toast('Analytics could not refresh. The last loaded figures are shown. ' + error.message, 'error'); } } if (state.view === 'team' && state.connected && state.role === 'owner') { try { await loadTeam(); } catch (error) { toast(error.message, 'error'); } } return; }

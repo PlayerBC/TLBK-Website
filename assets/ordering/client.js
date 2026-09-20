@@ -130,6 +130,13 @@ export async function partyCartItemsApi(action, payload = {}) {
   return data;
 }
 
+export async function partyCartPhotosApi(action, payload = {}) {
+  const client = await connection();
+  const { data, error } = await client.rpc('party_cart_photos_api', { p_action: action, p_payload: payload });
+  if (error) throw new Error(error.message || 'The party cart photos could not be updated. Please try again.');
+  return data;
+}
+
 export async function websiteVisitorStats({ signal } = {}) {
   return edge('website-analytics', {}, { signal, timeout: 45_000 });
 }
