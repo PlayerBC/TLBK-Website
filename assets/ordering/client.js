@@ -123,6 +123,13 @@ export async function partyPackagesApi(action, payload = {}) {
   return data;
 }
 
+export async function partyCartItemsApi(action, payload = {}) {
+  const client = await connection();
+  const { data, error } = await client.rpc('party_cart_items_api', { p_action: action, p_payload: payload });
+  if (error) throw new Error(error.message || 'The cart items could not be updated. Please try again.');
+  return data;
+}
+
 export async function websiteVisitorStats({ signal } = {}) {
   return edge('website-analytics', {}, { signal, timeout: 45_000 });
 }

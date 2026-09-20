@@ -1,4 +1,4 @@
-import { api, auth, ready, configured, money, escapeHtml, manilaDate, formatDate, toast, upload, websiteVisitorStats } from './client.js?v=party-packages-1';
+import { api, auth, ready, configured, money, escapeHtml, manilaDate, formatDate, toast, upload, websiteVisitorStats } from './client.js?v=cart-items-1';
 import { prepareOrderSave, normalizeOrderEditReason } from './order-edit-save.js?v=custom-confirmation-1';
 import { confirmOrderTotalChange } from './order-edit-confirmation.js?v=custom-confirmation-1';
 import { socialContactMessage } from './checkout-fields.js?v=social-contact-1';
@@ -12,7 +12,7 @@ import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-me
 import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
 import { mountGalleryManager } from './gallery-manager.js';
-import { mountPartyPackageManager } from './party-package-manager.js';
+import { mountPartyPackageManager } from './party-package-manager.js?v=cart-items-1';
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
@@ -23,7 +23,7 @@ const CLOSED = new Set(['cancelled', 'expired', 'completed']);
 const PAYMENT = ['awaiting_payment', 'under_review', 'paid', 'rejected', 'cancelled'];
 const FULFILLMENT = ['pending_confirmation', 'confirmed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'completed', 'refunded', 'cancelled', 'expired'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const state = { view: 'overview', role: null, connected: false, products: [], categories: [], inventory: [], promos: [], zones: [], orders: [], settings: {}, staff: [], filters: { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }, inventoryDates: [manilaDate()], inventoryDrafts: {} };
+const state = { view: location.hash === '#packages' ? 'packages' : 'overview', role: null, connected: false, products: [], categories: [], inventory: [], promos: [], zones: [], orders: [], settings: {}, staff: [], filters: { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }, inventoryDates: [manilaDate()], inventoryDrafts: {} };
 state.productFilters = { search: '', status: '', category: '' };
 state.promoFilter = '';
 state.printSelection = new Set();
@@ -129,8 +129,8 @@ function render() {
   $$('.sidebar-link').forEach(button => { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-current', button.dataset.view === state.view ? 'page' : 'false'); });
   const views = { overview: overviewView, analytics: analyticsView, orders: ordersView, products: productsView, inventory: inventoryView, promos: promosView, settings: settingsView, team: teamView, galleries: () => '<div id="gallery-manager"></div>', packages: () => '<div id="party-package-manager"></div>' };
   $('#workspace').innerHTML = setupNotice() + views[state.view]();
-  if (state.view === 'galleries') mountGalleryManager($('#gallery-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=party-packages-1')).galleryApi(...args), upload });
-  if (state.view === 'packages') mountPartyPackageManager($('#party-package-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=party-packages-1')).partyPackagesApi(...args) });
+  if (state.view === 'galleries') mountGalleryManager($('#gallery-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=cart-items-1')).galleryApi(...args), upload });
+  if (state.view === 'packages') mountPartyPackageManager($('#party-package-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=cart-items-1')).partyPackagesApi(...args), cartApi: async (...args) => (await import('./client.js?v=cart-items-1')).partyCartItemsApi(...args) });
   syncOrderPrintSelection();
   syncVisitorPolling();
   syncPromoStatuses();

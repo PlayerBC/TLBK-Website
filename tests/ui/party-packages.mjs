@@ -13,6 +13,17 @@ const bootstrap = { role:'owner', products:[], categories:[], orders:[], invento
 const items = Array.from({length:4},(_,i)=>({id:`package-${i+1}`,name:`Package ${i+1}`,subtitle:'',price_cents:i===2?1050000:900000,badge:i===2?'Most Popular':i===3?'New!':'',features:[{label:i===1?'100 Cups Nori Chips':'50 Cookie A La Mode',detail:'Choose your flavors'},{label:'Choose 3 Flavors',detail:'Vanilla, Chocolate, Strawberry'}],published:true,sort_order:(i+1)*10,revision:1,created_at:'2026-09-20T00:00:00Z'}));
 let settings={revision:1,inclusions:[{label:'4 Hours Duration',detail:''},{label:'Full Cart Setup',detail:''},{label:'2 Servers',detail:''},{label:'Free Delivery Within Quezon City',detail:'Excluding Novaliches & Payatas'}]},failSave=false,failBrowse=false;
 const calls=[],errors=[];
+let cart={items:['Cookie A La Mode','Nori Chips Cups','Panna Cotta Cups'],revision:1},failCartSave=false,failCartBrowse=false;
+const cartCalls=[];
+function cartResponse(action,payload={}) {
+  cartCalls.push({action,payload});
+  if(action==='browse'||action==='admin_get')return cart;
+  if(action==='save'){
+    if(failCartSave){failCartSave=false;throw Error('Cart changed in another window. Your edits are still here.');}
+    cart={items:payload.items,revision:cart.revision+1};return cart;
+  }
+  throw Error('Unexpected cart action');
+}
 function response(action,payload={}) {
   calls.push({action,payload});
   if(action==='admin_list'||action==='browse')return {items:items.filter(p=>action==='admin_list'||p.published).sort((a,b)=>a.sort_order-b.sort_order),settings};
@@ -30,12 +41,20 @@ async function context({role='owner',mobile=false}={}){
   const mock=`export const configured=true,ready=Promise.resolve(),auth={getSession:async()=>({data:{session:{user:{id:'fixture'}}}}),onAuthStateChange:()=>{}};export async function api(){return ${JSON.stringify({...bootstrap,role})}};export async function upload(){};export async function websiteVisitorStats(){return {}};export async function partyPackagesApi(action,payload){const r=await fetch('/test-party',{method:'POST',body:JSON.stringify({action,payload})});const d=await r.json();if(!r.ok)throw Error(d.message);return d;}${helpers}`;
   await ctx.route('**/*',async route=>{
     const url=new URL(route.request().url());
+    if(url.pathname==='/rest/v1/rpc/party_cart_items_api'){
+      if(failCartBrowse){failCartBrowse=false;return route.fulfill({status:503,body:'Unavailable'});}
+      const{p_action,p_payload}=route.request().postDataJSON();return route.fulfill({contentType:'application/json',body:JSON.stringify(cartResponse(p_action,p_payload))});
+    }
+    if(url.pathname==='/test-cart'){
+      try{const{action,payload}=route.request().postDataJSON();return route.fulfill({contentType:'application/json',body:JSON.stringify(cartResponse(action,payload))});}
+      catch(error){return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({message:error.message})});}
+    }
     if(url.pathname==='/rest/v1/rpc/party_packages_api'){
       if(failBrowse){failBrowse=false;return route.fulfill({status:503,body:'Unavailable'});}
       const {p_action,p_payload}=route.request().postDataJSON();return route.fulfill({contentType:'application/json',body:JSON.stringify(response(p_action,p_payload))});
     }
     if(url.origin!==origin)return route.abort();
-    if(url.pathname==='/assets/ordering/client.js')return route.fulfill({contentType:'text/javascript',body:mock});
+    if(url.pathname==='/assets/ordering/client.js')return route.fulfill({contentType:'text/javascript',body:mock+`export async function partyCartItemsApi(action,payload){const r=await fetch('/test-cart',{method:'POST',body:JSON.stringify({action,payload})});const d=await r.json();if(!r.ok)throw Error(d.message);return d;}`});
     if(/\/assets\/ordering\/(traffic|newsletter)\.js/.test(url.pathname))return route.fulfill({contentType:'text/javascript',body:''});
     if(url.pathname==='/test-party'){
       try{const{action,payload}=route.request().postDataJSON();return route.fulfill({contentType:'application/json',body:JSON.stringify(response(action,payload))});}
@@ -49,7 +68,7 @@ async function context({role='owner',mobile=false}={}){
 }
 try{
   const ctx=await context(),page=await ctx.newPage();page.on('dialog',d=>d.accept());
-  await page.goto(`${origin}/manage.html`);await page.locator('[data-view="packages"]').click();await page.locator('[data-party-edit]').first().waitFor();
+  await page.goto(`${origin}/manage.html#packages`);await page.locator('[data-party-edit]').first().waitFor();
   assert.equal(await page.locator('[data-party-edit]').count(),4);
   await page.screenshot({path:join(output,'dashboard.png'),fullPage:true});
   await page.locator('[data-party-edit="package-1"]').click();
@@ -71,19 +90,35 @@ try{
   await page.locator('[data-party-form] button[type="submit"]').click();await page.locator('.party-editor').waitFor({state:'hidden'});assert.equal(items.length,5);assert.match(await page.locator('.party-admin-item').first().innerText(),/New custom package/);
   await page.locator('[data-party-edit="package-2"]').click();await page.locator('[name="published"]').uncheck();await page.locator('[data-party-form] button[type="submit"]').click();await page.locator('.party-editor').waitFor({state:'hidden'});
   await page.locator('[data-party-settings]').click();await page.locator('[data-feature-label]').first().fill('5 Hours Duration');await page.locator('[data-party-form] button[type="submit"]').click();await page.locator('.party-editor').waitFor({state:'hidden'});
+  await page.locator('[data-party-cart]').click();await page.locator('[data-feature-label]').first().fill('Updated cookie treats');
+  await page.locator('[data-feature-remove]').nth(1).click();await page.locator('[data-feature-add]').click();await page.locator('[data-feature-label]').last().fill('New custom treat');await page.locator('[data-feature-up]').last().click();
+  assert.equal(await page.locator('[data-feature-detail]').count(),0);
+  failCartSave=true;await page.locator('[data-party-form] button[type="submit"]').click();await page.locator('[data-party-error]').filter({hasText:'Cart changed'}).waitFor();assert.equal(await page.locator('[data-feature-label]').first().inputValue(),'Updated cookie treats');
+  await page.locator('[data-party-form] button[type="submit"]').click();await page.locator('.party-editor').waitFor({state:'hidden'});
+  const cartSaves=cartCalls.filter(c=>c.action==='save');assert.equal(cartSaves[0].payload.operation_id,cartSaves[1].payload.operation_id);
+  assert.deepEqual(cart.items,['Updated cookie treats','New custom treat','Panna Cotta Cups']);
+  await page.reload();await page.locator('[data-view="packages"]').click();await page.locator('[data-party-cart-list]').filter({hasText:'New custom treat'}).waitFor();
+  await page.locator('[data-party-cart]').click();await page.locator('.party-editor').evaluate(el=>el.scrollTop=0);await page.evaluate(()=>document.fonts.ready);assert(await page.evaluate(()=>document.fonts.check('14px "Chelsea Market"')));await page.screenshot({path:join(output,'customize-editor.png')});await page.locator('[data-party-close]').first().click();
   const publicPage=await ctx.newPage();await publicPage.goto(`${origin}/partycarts.html`);await publicPage.locator('.party-card').first().waitFor();assert.equal(await publicPage.locator('.party-card').count(),4);assert.equal(await publicPage.locator('.party-card h3').first().textContent(),'New custom package');assert(!(await publicPage.locator('[data-party-results]').innerText()).includes('Package 2'));
   assert.match(await publicPage.locator('.party-inclusions').innerText(),/5 Hours Duration/);
+  await publicPage.locator('[data-party-cart-item]').first().waitFor();assert.deepEqual(await publicPage.locator('[data-party-cart-item]').allTextContents(),cart.items);
+  assert.equal(await publicPage.locator('[data-party-cart-more] a').getAttribute('href'),'pastries.html');
+  await publicPage.evaluate(()=>document.fonts.ready);assert.match(await publicPage.locator('.party-card h3').first().evaluate(el=>getComputedStyle(el).fontFamily),/Chelsea Market/);assert.match(await publicPage.locator('.party-price').first().evaluate(el=>getComputedStyle(el).fontFamily),/Chelsea Market/);
   await publicPage.locator('.party-card').first().locator('summary').first().click();assert.equal(await publicPage.locator('[data-party-results] img').count(),0);assert.equal(await publicPage.evaluate(()=>window.injected),undefined);
   assert.equal(await publicPage.locator('.party-inquire').first().getAttribute('href'),'contactus.html');
   assert.match(await publicPage.locator('body').innerText(),/Customize your own cart!/i);
   await publicPage.locator('[data-party-packages]').screenshot({path:join(output,'public-packages.png')});
   failBrowse=true;await publicPage.reload();await publicPage.locator('[data-party-retry]:not([hidden])').waitFor();assert.equal(await publicPage.locator('.party-card').count(),0);await publicPage.locator('[data-party-retry]').click();await publicPage.locator('.party-card').first().waitFor();
+  failCartBrowse=true;await publicPage.reload();await publicPage.locator('[data-cart-retry]').waitFor();assert.equal(await publicPage.locator('[data-party-cart-item]').count(),0);await publicPage.locator('[data-cart-retry]').click();await publicPage.locator('[data-party-cart-item]').first().waitFor();
   const staff=await context({role:'staff'}),staffPage=await staff.newPage();const before=calls.filter(c=>c.action==='admin_list').length;
-  await staffPage.goto(`${origin}/manage.html`);await staffPage.locator('[data-view="packages"]').click();await staffPage.getByText('Sign in with the owner account to add or edit party packages.').waitFor();assert.equal(await staffPage.locator('[data-party-new]').count(),0);assert.equal(calls.filter(c=>c.action==='admin_list').length,before);
+  const cartBefore=cartCalls.filter(c=>c.action==='admin_get').length;
+  await staffPage.goto(`${origin}/manage.html`);await staffPage.locator('[data-view="packages"]').click();await staffPage.getByText('Sign in with the owner account to add or edit party packages.').waitFor();assert.equal(await staffPage.locator('[data-party-new]').count(),0);assert.equal(calls.filter(c=>c.action==='admin_list').length,before);assert.equal(cartCalls.filter(c=>c.action==='admin_get').length,cartBefore);
   const mobile=await context({mobile:true}),phone=await mobile.newPage();phone.on('dialog',d=>d.accept());await phone.goto(`${origin}/manage.html`);await phone.locator('[data-view="packages"]').click();await phone.locator('[data-party-edit]').first().click();
   assert(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert(await phone.locator('.party-editor').evaluate(el=>el.scrollWidth<=el.clientWidth+1));await phone.screenshot({path:join(output,'editor-mobile.png'),fullPage:true});
   await phone.goto(`${origin}/partycarts.html`);await phone.locator('.party-card').first().waitFor();assert(await phone.locator('[data-party-packages]').evaluate(el=>el.scrollWidth<=el.clientWidth+1));
   await phone.locator('[data-party-packages]').screenshot({path:join(output,'public-mobile.png')});
+  await page.locator('[data-party-cart]').click();while(await page.locator('[data-feature-remove]').count())await page.locator('[data-feature-remove]').first().click();assert(await page.locator('[data-feature-add]').isEnabled());await page.locator('[data-party-form] button[type="submit"]').click();await page.locator('.party-editor').waitFor({state:'hidden'});
+  await publicPage.reload();await publicPage.getByText('Contact us to discuss treats for your custom cart.').waitFor();assert.equal(await publicPage.locator('[data-party-cart-item]').count(),0);
   items.forEach(p=>{p.published=false});await publicPage.reload();await publicPage.locator('[data-party-status]').filter({hasText:'updating our party packages'}).waitFor();assert.equal(await publicPage.locator('.party-card').count(),0);
   assert.deepEqual(errors,[]);console.log('PASS owner editing, retained drafts, retries, create, visibility, ordering, shared inclusions, public updates, escaped text, staff permissions, empty/error states and mobile layout.');
 }finally{await browser.close();}
