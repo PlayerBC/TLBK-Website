@@ -12,7 +12,7 @@ import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-me
 import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
 import { mountGalleryManager } from './gallery-manager.js';
-import { mountPartyPackageManager } from './party-package-manager.js?v=cart-items-1';
+import { mountPartyPackageManager } from './party-package-manager.js?v=package-delete-1';
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];

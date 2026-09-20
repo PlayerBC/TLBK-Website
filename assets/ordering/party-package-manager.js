@@ -25,7 +25,7 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi }
   function markDirty(value) { dirty = value; root.dataset.dirty = String(value); }
   function paint() {
     items.sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
-    $('[data-party-list]').innerHTML = items.map(p => `<article class="party-admin-item panel"><div><span class="badge">${p.published ? 'Visible' : 'Hidden'}</span>${p.badge ? `<span class="party-admin-badge">${esc(p.badge)}</span>` : ''}<h2>${esc(p.name)}</h2><p>${esc(p.subtitle || p.features[0]?.label || '')}</p><small>Display order: ${p.sort_order} · ${p.features.length} inclusions</small></div><div class="party-admin-item-actions"><strong>${esc(packagePrice(p.price_cents))}</strong><button class="button button-secondary" type="button" data-party-edit="${esc(p.id)}">Edit<span class="sr-only"> ${esc(p.name)}</span></button></div></article>`).join('') || '<p class="notice">No packages yet. Add your first package.</p>';
+    $('[data-party-list]').innerHTML = items.map(p => `<article class="party-admin-item panel"><div><span class="badge">${p.published ? 'Visible' : 'Hidden'}</span>${p.badge ? `<span class="party-admin-badge">${esc(p.badge)}</span>` : ''}<h2>${esc(p.name)}</h2><p>${esc(p.subtitle || p.features[0]?.label || '')}</p><small>Display order: ${p.sort_order} · ${p.features.length} inclusions</small></div><div class="party-admin-item-actions"><strong>${esc(packagePrice(p.price_cents))}</strong><div class="row-actions"><button class="button button-secondary" type="button" data-party-edit="${esc(p.id)}">Edit<span class="sr-only"> ${esc(p.name)}</span></button><button class="button button-danger" type="button" data-party-delete="${esc(p.id)}">Delete<span class="sr-only"> ${esc(p.name)}</span></button></div></div></article>`).join('') || '<p class="notice">No packages yet. Add your first package.</p>';
     $('[data-party-shared]').innerHTML = packageInclusions(settings.inclusions);
     $('[data-party-cart-list]').innerHTML = cart?.items.map(item => `<li>${esc(item)}</li>`).join('') || '';
     if (cart) $('[data-party-cart-message]').textContent = cart.items.length ? `${cart.items.length} items · shown in this order on the website` : 'No items listed. Use Edit cart items to add treats.';
@@ -42,6 +42,21 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi }
       items = result.items; settings = result.settings; loaded = true; paint(); message('Saved changes appear on the Party Carts page. Hidden packages stay here for later.');
     } catch (error) { message(error.message || 'Packages could not load. Try Refresh.', true); }
     finally { lock(false); }
+  }
+  async function deletePackage(item) {
+    if (!item || !confirm(`Delete “${item.name}”?\n\nThis removes the package from your dashboard and the Party Carts page. This cannot be undone.`)) return;
+    const index = items.findIndex(p => p.id === item.id);
+    let deleted = false;
+    lock(true); message(`Deleting “${item.name}”…`);
+    try {
+      await api('delete', { id: item.id, revision: item.revision });
+      items = items.filter(p => p.id !== item.id); deleted = true;
+      paint(); message(`Deleted “${item.name}”.`);
+    } catch (error) { message(error.message || 'Could not delete the package. Try again.', true); }
+    finally {
+      lock(false);
+      if (deleted) (root.querySelectorAll('[data-party-edit]')[Math.min(index, items.length - 1)] || $('[data-party-new]')).focus();
+    }
   }
   const field = (name, label, value, attrs = '') => `<label class="field"><span>${label}</span><input name="${name}" value="${esc(value)}" ${attrs}></label>`;
   function featureRow(feature) {
@@ -97,6 +112,7 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi }
     else if (target.hasAttribute('data-party-cart')) editCart();
     else if (target.hasAttribute('data-party-refresh')) void load();
     else if (target.hasAttribute('data-party-edit')) edit(items.find(p => p.id === target.dataset.partyEdit));
+    else if (target.hasAttribute('data-party-delete')) void deletePackage(items.find(p => p.id === target.dataset.partyDelete));
     else if (target.hasAttribute('data-party-close')) close();
     else if (target.matches('[data-feature-add],[data-feature-remove],[data-feature-up],[data-feature-down]')) {
       const row = target.closest('[data-party-feature]');

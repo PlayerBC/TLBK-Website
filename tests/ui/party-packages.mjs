@@ -13,6 +13,7 @@ const bootstrap = { role:'owner', products:[], categories:[], orders:[], invento
 const items = Array.from({length:4},(_,i)=>({id:`package-${i+1}`,name:`Package ${i+1}`,subtitle:'',price_cents:i===2?1050000:900000,badge:i===2?'Most Popular':i===3?'New!':'',features:[{label:i===1?'100 Cups Nori Chips':'50 Cookie A La Mode',detail:'Choose your flavors'},{label:'Choose 3 Flavors',detail:'Vanilla, Chocolate, Strawberry'}],published:true,sort_order:(i+1)*10,revision:1,created_at:'2026-09-20T00:00:00Z'}));
 let settings={revision:1,inclusions:[{label:'4 Hours Duration',detail:''},{label:'Full Cart Setup',detail:''},{label:'2 Servers',detail:''},{label:'Free Delivery Within Quezon City',detail:'Excluding Novaliches & Payatas'}]},failSave=false,failBrowse=false;
 const calls=[],errors=[];
+let failDelete=false,deleteGate;
 let cart={items:['Cookie A La Mode','Nori Chips Cups','Panna Cotta Cups'],revision:1},failCartSave=false,failCartBrowse=false;
 const cartCalls=[];
 function cartResponse(action,payload={}) {
@@ -33,6 +34,12 @@ function response(action,payload={}) {
     const index=items.findIndex(i=>i.id===p.id);if(index<0)items.push(p);else items[index]=p;return p;
   }
   if(action==='save_settings'){settings={inclusions:payload.inclusions,revision:settings.revision+1};return settings;}
+  if(action==='delete'){
+    if(failDelete){failDelete=false;throw Error('Could not delete the package. Try again.');}
+    const index=items.findIndex(p=>p.id===payload.id);
+    if(index>=0){assert.equal(payload.revision,items[index].revision);items.splice(index,1);}
+    return {id:payload.id,deleted:true};
+  }
   throw Error(`Unexpected action ${action}`);
 }
 const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE_PATH||undefined});
@@ -57,7 +64,7 @@ async function context({role='owner',mobile=false}={}){
     if(url.pathname==='/assets/ordering/client.js')return route.fulfill({contentType:'text/javascript',body:mock+`export async function partyCartItemsApi(action,payload){const r=await fetch('/test-cart',{method:'POST',body:JSON.stringify({action,payload})});const d=await r.json();if(!r.ok)throw Error(d.message);return d;}`});
     if(/\/assets\/ordering\/(traffic|newsletter)\.js/.test(url.pathname))return route.fulfill({contentType:'text/javascript',body:''});
     if(url.pathname==='/test-party'){
-      try{const{action,payload}=route.request().postDataJSON();return route.fulfill({contentType:'application/json',body:JSON.stringify(response(action,payload))});}
+      try{const{action,payload}=route.request().postDataJSON();if(action==='delete'&&deleteGate)await deleteGate;return route.fulfill({contentType:'application/json',body:JSON.stringify(response(action,payload))});}
       catch(error){return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({message:error.message})});}
     }
     try{return route.fulfill({contentType:{'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.woff2':'font/woff2'}[extname(url.pathname)]||'application/octet-stream',body:await readFile(join(root,url.pathname))});}
@@ -67,9 +74,10 @@ async function context({role='owner',mobile=false}={}){
   return ctx;
 }
 try{
-  const ctx=await context(),page=await ctx.newPage();page.on('dialog',d=>d.accept());
+  const ctx=await context(),page=await ctx.newPage();let acceptDialog=true,lastDialogMessage='';page.on('dialog',d=>{lastDialogMessage=d.message();return acceptDialog?d.accept():d.dismiss();});
   await page.goto(`${origin}/manage.html#packages`);await page.locator('[data-party-edit]').first().waitFor();
   assert.equal(await page.locator('[data-party-edit]').count(),4);
+  assert.equal(await page.locator('[data-party-delete]').count(),4);
   await page.screenshot({path:join(output,'dashboard.png'),fullPage:true});
   await page.locator('[data-party-edit="package-1"]').click();
   await page.locator('[name="price"]').fill('9500.50');await page.locator('[name="subtitle"]').fill('Cookie party');
@@ -108,11 +116,24 @@ try{
   assert.equal(await publicPage.locator('.party-inquire').first().getAttribute('href'),'contactus.html');
   assert.match(await publicPage.locator('body').innerText(),/Customize your own cart!/i);
   await publicPage.locator('[data-party-packages]').screenshot({path:join(output,'public-packages.png')});
+  const deleting=page.locator('[data-party-delete="package-4"]'),deleteBefore=calls.filter(c=>c.action==='delete').length;
+  acceptDialog=false;await deleting.click();assert.match(lastDialogMessage,/Delete.*Package 4/);assert.match(lastDialogMessage,/cannot be undone/);
+  assert.equal(calls.filter(c=>c.action==='delete').length,deleteBefore);assert.equal(await deleting.count(),1);
+  acceptDialog=true;failDelete=true;await deleting.click();await page.locator('[data-party-message]').filter({hasText:'Could not delete'}).waitFor();assert.equal(await deleting.count(),1);assert(await deleting.isEnabled());
+  let releaseDelete;deleteGate=new Promise(resolve=>{releaseDelete=resolve});await deleting.click();
+  await page.locator('[data-party-message]').filter({hasText:'Deleting'}).waitFor();assert(await deleting.isDisabled());assert(await page.locator('[data-party-new]').isDisabled());
+  await deleting.dispatchEvent('click');releaseDelete();deleteGate=null;
+  await deleting.waitFor({state:'detached'});assert.equal(calls.filter(c=>c.action==='delete').length,deleteBefore+2);
+  assert.equal(await page.locator('[data-party-edit]').count(),4);assert.match(await page.locator('[data-party-message]').innerText(),/Deleted.*Package 4/);
+  assert(await page.locator('[data-party-edit]').evaluateAll(nodes=>nodes.includes(document.activeElement)));
+  await page.reload();await page.locator('[data-party-edit]').first().waitFor();assert.equal(await page.locator('[data-party-delete="package-4"]').count(),0);
+  await publicPage.reload();await publicPage.locator('.party-card').first().waitFor();assert.equal(await publicPage.locator('.party-card').count(),3);assert(!(await publicPage.locator('[data-party-results]').innerText()).includes('Package 4'));
   failBrowse=true;await publicPage.reload();await publicPage.locator('[data-party-retry]:not([hidden])').waitFor();assert.equal(await publicPage.locator('.party-card').count(),0);await publicPage.locator('[data-party-retry]').click();await publicPage.locator('.party-card').first().waitFor();
   failCartBrowse=true;await publicPage.reload();await publicPage.locator('[data-cart-retry]').waitFor();assert.equal(await publicPage.locator('[data-party-cart-item]').count(),0);await publicPage.locator('[data-cart-retry]').click();await publicPage.locator('[data-party-cart-item]').first().waitFor();
   const staff=await context({role:'staff'}),staffPage=await staff.newPage();const before=calls.filter(c=>c.action==='admin_list').length;
   const cartBefore=cartCalls.filter(c=>c.action==='admin_get').length;
   await staffPage.goto(`${origin}/manage.html`);await staffPage.locator('[data-view="packages"]').click();await staffPage.getByText('Sign in with the owner account to add or edit party packages.').waitFor();assert.equal(await staffPage.locator('[data-party-new]').count(),0);assert.equal(calls.filter(c=>c.action==='admin_list').length,before);assert.equal(cartCalls.filter(c=>c.action==='admin_get').length,cartBefore);
+  assert.equal(await staffPage.locator('[data-party-delete]').count(),0);
   const mobile=await context({mobile:true}),phone=await mobile.newPage();phone.on('dialog',d=>d.accept());await phone.goto(`${origin}/manage.html`);await phone.locator('[data-view="packages"]').click();await phone.locator('[data-party-edit]').first().click();
   assert(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert(await phone.locator('.party-editor').evaluate(el=>el.scrollWidth<=el.clientWidth+1));await phone.screenshot({path:join(output,'editor-mobile.png'),fullPage:true});
   await phone.goto(`${origin}/partycarts.html`);await phone.locator('.party-card').first().waitFor();assert(await phone.locator('[data-party-packages]').evaluate(el=>el.scrollWidth<=el.clientWidth+1));
@@ -120,5 +141,9 @@ try{
   await page.locator('[data-party-cart]').click();while(await page.locator('[data-feature-remove]').count())await page.locator('[data-feature-remove]').first().click();assert(await page.locator('[data-feature-add]').isEnabled());await page.locator('[data-party-form] button[type="submit"]').click();await page.locator('.party-editor').waitFor({state:'hidden'});
   await publicPage.reload();await publicPage.getByText('Contact us to discuss treats for your custom cart.').waitFor();assert.equal(await publicPage.locator('[data-party-cart-item]').count(),0);
   items.forEach(p=>{p.published=false});await publicPage.reload();await publicPage.locator('[data-party-status]').filter({hasText:'updating our party packages'}).waitFor();assert.equal(await publicPage.locator('.party-card').count(),0);
-  assert.deepEqual(errors,[]);console.log('PASS owner editing, retained drafts, retries, create, visibility, ordering, shared inclusions, public updates, escaped text, staff permissions, empty/error states and mobile layout.');
+  while(await page.locator('[data-party-delete]').count()){
+    const button=page.locator('[data-party-delete]').first(),id=await button.getAttribute('data-party-delete');await button.click();await page.locator(`[data-party-delete="${id}"]`).waitFor({state:'detached'});
+  }
+  await page.getByText('No packages yet. Add your first package.').waitFor();assert(await page.locator('[data-party-new]').isEnabled());assert(await page.locator('[data-party-new]').evaluate(el=>el===document.activeElement));
+  assert.deepEqual(errors,[]);console.log('PASS owner editing, retained drafts, retries, create, confirmed deletion/cancel/failure/busy/empty states, visibility, ordering, shared inclusions, public updates, escaped text, staff permissions and mobile layout.');
 }finally{await browser.close();}
