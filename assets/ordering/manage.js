@@ -12,7 +12,7 @@ import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-me
 import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
 import { mountGalleryManager } from './gallery-manager.js';
-import { mountPartyCartPhotos } from './party-cart-photos-manager.js?v=dessert-bar-1';
+import { mountPartyCartPhotos } from './party-cart-photos-manager.js?v=photo-grip-1';
 import { eventPage } from './event-page.js?v=dessert-bar-1';
 import { mountPartyPackageManager } from './party-package-manager.js?v=dessert-bar-1';
 
