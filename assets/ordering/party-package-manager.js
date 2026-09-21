@@ -12,7 +12,7 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi, 
     <div class="row-actions party-manager-actions"><button class="button" type="button" data-party-new disabled>Add package</button><button class="button button-secondary" type="button" data-party-settings disabled>Edit shared inclusions</button><button class="button button-secondary" type="button" data-party-refresh>Refresh</button></div>
     <p data-party-message role="status" aria-live="polite"></p><div data-party-list class="party-admin-list"></div><div data-party-shared></div>
     <section class="panel party-cart-admin"><div class="section-heading"><div><h2>Customize your own ${service.customName}</h2><p>Edit the treats customers can choose for a custom ${service.customName}.</p></div><button type="button" class="button button-secondary" data-party-cart disabled>Edit ${service.customName} items</button></div><p data-party-cart-message role="status"></p><ul data-party-cart-list class="party-cart-admin-list"></ul></section>
-    <dialog class="party-editor" aria-labelledby="party-editor-title"><form data-party-form><div class="party-editor-top"><h2 id="party-editor-title"></h2><button type="button" class="icon-button" data-party-close aria-label="Close editor">×</button></div><div class="party-editor-layout"><div data-party-fields></div><aside><p class="eyebrow">Preview</p><div class="party-preview" data-party-preview></div></aside></div><p data-party-error role="alert"></p><div class="row-actions"><button type="submit" class="button">Save changes</button><button type="button" class="button button-secondary" data-party-close>Cancel</button></div></form></dialog>`;
+    <dialog closedby="none" class="party-editor" aria-labelledby="party-editor-title"><form data-party-form><div class="party-editor-top"><h2 id="party-editor-title"></h2><button type="button" class="icon-button" data-party-close aria-label="Close editor">×</button></div><div class="party-editor-layout"><div data-party-fields></div><aside><p class="eyebrow">Preview</p><div class="party-preview" data-party-preview></div></aside></div><p data-party-error role="alert"></p><div class="row-actions"><button type="submit" class="button">Save changes</button><button type="button" class="button button-secondary" data-party-close>Cancel</button></div></form></dialog>`;
   const $ = selector => root.querySelector(selector);
   const dialog = $('dialog'), form = $('[data-party-form]');
   function message(text, error = false) { $('[data-party-message]').textContent = text; $('[data-party-message]').className = error ? 'notice danger' : ''; }
@@ -104,7 +104,7 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi, 
     if (busy || (dirty && !confirm('Discard your unsaved package changes?'))) return;
     markDirty(false); dialog.close(); returnFocus?.focus();
   }
-  dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
+  dialog.addEventListener('cancel', event => event.preventDefault());
   form.addEventListener('input', () => { markDirty(true); operation = crypto.randomUUID(); preview(); });
   root.addEventListener('click', event => {
     if (busy) return;

@@ -81,6 +81,8 @@ try{
   await page.screenshot({path:join(output,'dashboard.png'),fullPage:true});
   await page.locator('[data-party-edit="package-1"]').click();
   await page.locator('[name="price"]').fill('9500.50');await page.locator('[name="subtitle"]').fill('Cookie party');
+  await page.mouse.click(2,2);await page.keyboard.press('Escape');
+  assert(await page.locator('.party-editor').evaluate(el=>el.open));assert.equal(await page.locator('[name="subtitle"]').inputValue(),'Cookie party');
   await page.locator('[data-feature-label]').first().fill('60 Cookie A La Mode');
   await page.locator('[data-feature-add]').click();await page.locator('[data-feature-label]').last().fill('Extra toppings');
   await page.locator('[data-feature-detail]').last().fill('Chocolate chips');await page.locator('[data-feature-up]').last().click();

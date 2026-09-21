@@ -86,6 +86,9 @@ try {
   assert.match(await page.locator('[data-gallery-file-info]').textContent(), /1600 × 1200/);
   await page.locator('[data-gallery-editor] [name="category"]').fill('Characters');
   await page.locator('[data-gallery-editor] [name="keywords"]').fill('Pikachu\nPokémon');
+  await page.mouse.click(2,2);await page.keyboard.press('Escape');
+  assert(await page.locator('.gallery-editor').evaluate(el=>el.open));
+  assert.equal(await page.locator('[data-gallery-editor] [name="keywords"]').inputValue(),'Pikachu\nPokémon');
   await page.screenshot({ path: join(output, 'upload-editor.png') });
   await page.locator('[data-gallery-editor] [type="submit"]').click();
   await page.locator('[data-gallery-editor-message]').filter({ hasText: 'WebP ready' }).waitFor();

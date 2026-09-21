@@ -81,10 +81,36 @@ async function save(page) {
   await page.locator('[data-form="product"] button[type="submit"]').click();
   await page.waitForFunction(()=>!document.querySelector('#admin-dialog').open);
 }
+async function editorStability(page, mobile=false) {
+  await page.locator('[name="name"]').fill('Keep my unfinished product');
+  await page.locator('[name="description"]').fill('Keep my unfinished description');
+  if (mobile) await page.touchscreen.tap(2,2); else await page.mouse.click(2,2);
+  await page.keyboard.press('Escape');
+  check(`${mobile?'Mobile':'Desktop'} outside clicks and Escape keep the editor and draft open`,await page.locator('#admin-dialog').evaluate(el=>el.open) && await page.locator('[name="name"]').inputValue()==='Keep my unfinished product');
+  const inOptions=async()=>{
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    assert(await page.locator('#admin-dialog').evaluate(el=>el.scrollTop>200),'Options stay in view instead of jumping to the top');
+    assert.equal(await page.locator('[name="description"]').inputValue(),'Keep my unfinished description');
+  };
+  await page.locator('[data-action="add-choice"][data-index="0"]').click();await inOptions();
+  assert(await page.locator('[name="choice_label_0_1"]').evaluate(el=>el===document.activeElement));
+  await page.locator('[data-action="remove-choice"][data-group="0"][data-index="1"]').click();await inOptions();
+  await page.locator('[data-action="remove-choice"][data-group="0"][data-index="0"]').click();await inOptions();
+  assert(await page.locator('[data-action="add-choice"][data-index="0"]').evaluate(el=>el===document.activeElement));
+  await page.locator('[data-action="add-group"]').click();await inOptions();
+  assert(await page.locator('[name="group_label_1"]').evaluate(el=>el===document.activeElement));
+  await page.locator('[data-action="remove-group"][data-index="1"]').click();await inOptions();
+  await page.locator('[data-action="remove-group"][data-index="0"]').click();await inOptions();
+  await page.locator('[data-action="add-group"]').click();await inOptions();
+  check(`${mobile?'Mobile':'Desktop'} adding/deleting choices and groups retains the options area, focus and unsaved fields`,true);
+  await page.locator('[data-action="close-dialog"]').click();assert(!(await page.locator('#admin-dialog').evaluate(el=>el.open)));
+  await openEditor(page);
+}
 try {
   const desktop=await context(),page=await desktop.newPage();
   page.on('pageerror',error=>result.errors.push(error.message));
   await openEditor(page);
+  await editorStability(page);
   await page.locator('[name="name"]').fill('Ube cake edited');
   await page.locator('[name="description"]').fill('Keep these unsaved details');
   await page.locator('[name="group_label_0"]').fill('Choose your flavor');
@@ -140,6 +166,7 @@ try {
   const mobile=await context({viewport:{width:390,height:844},hasTouch:true,isMobile:true}),touchPage=await mobile.newPage();
   touchPage.on('pageerror',error=>result.errors.push(error.message));
   await openEditor(touchPage);
+  await editorStability(touchPage,true);
   await touchDrag(touchPage,4,0);
   assert.deepEqual(await order(touchPage),[5,1,2,3,4].map(photo));
   check('Native touch dragging reorders across wrapped rows',true);
