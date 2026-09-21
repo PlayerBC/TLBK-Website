@@ -13,6 +13,8 @@ import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
 import { mountGalleryManager } from './gallery-manager.js';
 import { mountPartyCartPhotos } from './party-cart-photos-manager.js?v=photo-grip-1';
+import { orderedCatalogProducts } from './catalog-ordering.js?v=drag-order-1';
+import { mountCatalogOrder } from './catalog-order.js?v=drag-order-1';
 import { eventPage } from './event-page.js?v=dessert-bar-1';
 import { mountPartyPackageManager } from './party-package-manager.js?v=dessert-bar-1';
 
@@ -32,6 +34,7 @@ state.printSelection = new Set();
 let activeOrder = null;
 let productDraft = null;
 let clearPhotoDrag = () => {};
+let catalogOrder = null;
 let editDraft = null;
 let modalReturnFocus = null;
 let promoStatusTimer = null;
@@ -53,7 +56,7 @@ window.addEventListener('pageshow', syncPromoStatuses);
 window.addEventListener('pagehide', () => clearTimeout(promoStatusTimer));
 const modal = $('#admin-dialog');
 window.addEventListener('beforeunload', event => {
-  if (['#party-package-manager', '#party-cart-photo-manager'].some(selector => $(selector)?.dataset.dirty === 'true' || $(selector)?.dataset.busy === 'true')) { event.preventDefault(); event.returnValue = ''; }
+  if (catalogOrder?.dirty || catalogOrder?.busy || ['#party-package-manager', '#party-cart-photo-manager'].some(selector => $(selector)?.dataset.dirty === 'true' || $(selector)?.dataset.busy === 'true')) { event.preventDefault(); event.returnValue = ''; }
 });
 bindDateCalendars($('#workspace'));
 const label = value => String(value || '').replaceAll('_', ' ').replace(/^\w/, c => c.toUpperCase());
@@ -103,6 +106,8 @@ function setupNotice() {
   return `<div class="notice"><strong>Draft dashboard · backend setup pending.</strong> You can explore the layout and forms. Saving, accounts, uploads, orders, and email delivery become available after the setup steps are completed. <a href="docs/SETUP.md" target="_blank" rel="noopener">Open setup guide</a></div>`;
 }
 function showDialog(title, content) {
+  if (catalogOrder && !catalogOrder.canLeave()) return false;
+  catalogOrder?.destroy(); catalogOrder = null;
   clearPhotoDrag();
   if (!modal.open) modalReturnFocus = document.activeElement;
   $('#dialog-title').textContent = title;
@@ -110,8 +115,10 @@ function showDialog(title, content) {
   if (!modal.open) modal.showModal();
   modal.scrollTop = 0;
   requestAnimationFrame(() => $('input:not([type=hidden]), select, textarea, button', $('#dialog-body'))?.focus());
+  return true;
 }
-function closeDialog() { clearPhotoDrag(); modal.close(); modalReturnFocus?.focus?.(); }
+function closeDialog() { if (catalogOrder && !catalogOrder.canLeave()) return; catalogOrder?.destroy(); catalogOrder = null; clearPhotoDrag(); modal.close(); modalReturnFocus?.focus?.(); }
+modal.addEventListener('cancel', event => { if (catalogOrder) { event.preventDefault(); closeDialog(); } });
 $('#dialog-close').addEventListener('click', closeDialog);
 modal.addEventListener('click', event => { if (event.target === modal) { const rect = modal.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDialog(); } });
 
@@ -119,7 +126,7 @@ async function refresh() {
   if (!configured) return;
   const result = await api('admin_bootstrap');
   Object.assign(state, result, { connected: true, analyticsUpdatedAt: new Date().toISOString() });
-  state.products.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name));
+  state.products = orderedCatalogProducts(state.products, state.categories);
   state.categories.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name));
   const reviews = state.orders.filter(needsPaymentReview).length;
   $('#review-count').textContent = reviews;
@@ -236,7 +243,7 @@ function productsView() {
   const f = state.productFilters;
   if (f.category && f.category !== '__uncategorized__' && !state.categories.some(c => c.id === f.category)) f.category = '';
   const products = filteredProducts();
-  return heading('Your menu', 'Beautiful bakes, thoughtfully described.', `<button class="button button-secondary" data-action="categories">Categories</button><button class="button" data-action="new-product" ${owner() ? '' : 'disabled'}>+ Add product</button>`) + readonly() +
+  return heading('Your menu', 'Beautiful bakes, thoughtfully described.', `<button class="button button-secondary" data-action="categories">Arrange categories</button><button class="button button-secondary" data-action="reorder-products" ${ownerLocked()}>Arrange products</button><button class="button" data-action="new-product" ${owner() ? '' : 'disabled'}>+ Add product</button>`) + readonly() +
     `<div class="product-filters" role="search" aria-label="Filter products"><label class="field product-search">Search products<input id="product-search" type="search" data-product-filter="search" placeholder="Search by product name" value="${esc(f.search)}" aria-controls="product-results" autocomplete="off"></label>${select('product-status', 'Status', option('', 'All statuses', f.status) + option('active', 'Active', f.status) + option('hidden', 'Hidden', f.status), 'data-product-filter="status" aria-controls="product-results"')}${select('product-category', 'Category', option('', 'All categories', f.category) + state.categories.map(c => option(c.id, c.name, f.category)).join('') + option('__uncategorized__', 'Uncategorized', f.category), 'data-product-filter="category" aria-controls="product-results"')}</div>` +
     `<div class="product-filter-summary"><p class="muted no-margin" id="product-count" role="status">Showing ${products.length} of ${state.products.length} product${state.products.length === 1 ? '' : 's'}</p><button type="button" class="button button-quiet" data-action="clear-product-filters" ${productFiltersActive() ? '' : 'disabled'}>Clear filters</button></div><div id="product-results">${productResults(products)}</div>`;
 }
@@ -318,7 +325,7 @@ function openProduct(id) {
 function captureProduct() {
   const form = $('[data-form="product"]');
   if (!form) return;
-  Object.assign(productDraft, { name: fieldValue(form, 'name'), description: fieldValue(form, 'description'), category_id: fieldValue(form, 'category_id') || null, price_cents: cents(fieldValue(form, 'price')), min_quantity: Number(fieldValue(form, 'min_quantity')), lead_days: Number(fieldValue(form, 'lead_days')), sort_order: Number(fieldValue(form, 'sort_order')), active: fieldChecked(form, 'active'), pickup_only: fieldChecked(form, 'pickup_only'), allow_same_day: fieldChecked(form, 'allow_same_day'), label: productLabelSettings({ enabled: fieldChecked(form, 'label_enabled'), text: fieldValue(form, 'label_text'), color: fieldValue(form, 'label_color') }) });
+  Object.assign(productDraft, { name: fieldValue(form, 'name'), description: fieldValue(form, 'description'), category_id: fieldValue(form, 'category_id') || null, price_cents: cents(fieldValue(form, 'price')), min_quantity: Number(fieldValue(form, 'min_quantity')), lead_days: Number(fieldValue(form, 'lead_days')), active: fieldChecked(form, 'active'), pickup_only: fieldChecked(form, 'pickup_only'), allow_same_day: fieldChecked(form, 'allow_same_day'), label: productLabelSettings({ enabled: fieldChecked(form, 'label_enabled'), text: fieldValue(form, 'label_text'), color: fieldValue(form, 'label_color') }) });
   productDraft.option_groups.forEach((group, gi) => { group.label = fieldValue(form, `group_label_${gi}`); group.required_count = Number(fieldValue(form, `group_count_${gi}`)); group.choices.forEach((choice, ci) => { choice.label = fieldValue(form, `choice_label_${gi}_${ci}`); choice.surcharge_cents = cents(fieldValue(form, `choice_price_${gi}_${ci}`)); choice.active = fieldChecked(form, `choice_active_${gi}_${ci}`); }); });
 }
 function productLabelEditor(value) {
@@ -362,19 +369,25 @@ function bindPhotoOrder() {
 }
 function renderProductDialog() {
   const p = productDraft;
-  showDialog(p.id ? 'Edit product' : 'Add a little deliciousness', `<form data-form="product">${formError}<div class="field-row">${input('name', 'Product name', p.name, 'text', 'required maxlength="160"')}${select('category_id', 'Category', option('', 'Uncategorized', p.category_id || '') + state.categories.map(c => option(c.id, c.name, p.category_id)).join(''))}</div>${textarea('description', 'Description', p.description, 'Describe the bake, what is included, and anything customers should know.', 'maxlength="6000"')}<div class="field-row three">${input('price', 'Base price · PHP', amount(p.price_cents), 'number', 'required min="0" max="9999999" step="0.01"')}${input('min_quantity', 'Minimum sellable units', p.min_quantity, 'number', 'required min="1" max="9999" step="1"', 'For a cookie box, one unit is one whole box.')}${input('lead_days', 'Full production days', p.lead_days, 'number', 'required min="0" max="365" step="1"')}</div><div class="field-row">${input('sort_order', 'Menu display order', p.sort_order, 'number', 'required step="1"')}${check('active', 'Show this product in the shop', p.active)}</div><div class="subsection"><h3>Fulfillment</h3>${check('pickup_only', 'Pickup only — this product cannot be delivered', p.pickup_only === true, ownerLocked())}<p class="help-text">Use for cakes, fragile products, or any item you do not deliver. An order containing this product must use pickup.</p>${check('allow_same_day', 'Allow same-day orders', p.allow_same_day === true, ownerLocked())}<p class="help-text">For ready-stock products with 0 full production days. Same-day orders follow the cutoff in Production schedule; after the cutoff, the earliest date is tomorrow. With no cutoff, same-day orders remain available throughout the day. The fulfillment date must be open with stock available, and every product in the basket must allow same-day orders.</p></div>${productLabelEditor(p.label)}<div class="subsection"><h3>Product photos</h3><p class="muted">JPEG, PNG, or WebP · up to 5 MB each. The first photo is the menu cover. Product photos are public.</p><p class="help-text" id="photo-order-help">Drag photos to rearrange them. On a keyboard, focus a photo and use the arrow keys. Save the product to publish the new order.</p><div id="product-photo-order">${renderProductPhotos(p.photos, { escapeHtml: esc, safeImage, disabled: Boolean(ownerLocked()) })}</div><p class="sr-only" id="photo-order-status" role="status" aria-live="polite" aria-atomic="true"></p>${input('photos', 'Upload photos', '', 'file', `accept="image/jpeg,image/png,image/webp" multiple id="product-photos" ${ownerLocked()}`)}</div><div class="subsection"><div class="section-heading"><h3 class="no-margin">Options & mixed boxes</h3><button type="button" class="button button-secondary" data-action="add-group">+ Add option group</button></div><p class="muted">A required count of 1 creates a single choice. Larger counts let customers build a mix. A box of six requires six selections in total; only the box quantity uses daily stock.</p><div>${p.option_groups.map((group, gi) => `<div class="option-group"><div class="section-heading"><strong>Option group ${gi + 1}</strong><button class="button button-quiet" type="button" data-action="remove-group" data-index="${gi}">Remove group</button></div><div class="field-row">${input(`group_label_${gi}`, 'Group name', group.label, 'text', 'required placeholder="Flavors, size, or packaging"')}${input(`group_count_${gi}`, 'Required selections per unit', group.required_count, 'number', 'required min="1" max="100" step="1"')}</div><div class="option-choices">${group.choices.map((choice, ci) => `<div class="option-choice">${input(`choice_label_${gi}_${ci}`, 'Choice name', choice.label, 'text', 'required')}${input(`choice_price_${gi}_${ci}`, 'Surcharge · PHP / choice', amount(choice.surcharge_cents), 'number', 'required min="0" step="0.01"')}${check(`choice_active_${gi}_${ci}`, 'Available', choice.active !== false)}<button type="button" class="icon-button" data-action="remove-choice" data-group="${gi}" data-index="${ci}" aria-label="Remove choice">×</button></div>`).join('')}</div><button type="button" class="button button-quiet" data-action="add-choice" data-index="${gi}">+ Add choice</button></div>`).join('')}</div></div>${actions(p.id ? 'Save product' : 'Create product')}</form>`);
+  showDialog(p.id ? 'Edit product' : 'Add a little deliciousness', `<form data-form="product">${formError}<div class="field-row">${input('name', 'Product name', p.name, 'text', 'required maxlength="160"')}${select('category_id', 'Category', option('', 'Uncategorized', p.category_id || '') + state.categories.map(c => option(c.id, c.name, p.category_id)).join(''))}</div>${textarea('description', 'Description', p.description, 'Describe the bake, what is included, and anything customers should know.', 'maxlength="6000"')}<div class="field-row three">${input('price', 'Base price · PHP', amount(p.price_cents), 'number', 'required min="0" max="9999999" step="0.01"')}${input('min_quantity', 'Minimum sellable units', p.min_quantity, 'number', 'required min="1" max="9999" step="1"', 'For a cookie box, one unit is one whole box.')}${input('lead_days', 'Full production days', p.lead_days, 'number', 'required min="0" max="365" step="1"')}</div><div class="field-row">${check('active', 'Show this product in the shop', p.active)}</div><div class="subsection"><h3>Fulfillment</h3>${check('pickup_only', 'Pickup only — this product cannot be delivered', p.pickup_only === true, ownerLocked())}<p class="help-text">Use for cakes, fragile products, or any item you do not deliver. An order containing this product must use pickup.</p>${check('allow_same_day', 'Allow same-day orders', p.allow_same_day === true, ownerLocked())}<p class="help-text">For ready-stock products with 0 full production days. Same-day orders follow the cutoff in Production schedule; after the cutoff, the earliest date is tomorrow. With no cutoff, same-day orders remain available throughout the day. The fulfillment date must be open with stock available, and every product in the basket must allow same-day orders.</p></div>${productLabelEditor(p.label)}<div class="subsection"><h3>Product photos</h3><p class="muted">JPEG, PNG, or WebP · up to 5 MB each. The first photo is the menu cover. Product photos are public.</p><p class="help-text" id="photo-order-help">Drag photos to rearrange them. On a keyboard, focus a photo and use the arrow keys. Save the product to publish the new order.</p><div id="product-photo-order">${renderProductPhotos(p.photos, { escapeHtml: esc, safeImage, disabled: Boolean(ownerLocked()) })}</div><p class="sr-only" id="photo-order-status" role="status" aria-live="polite" aria-atomic="true"></p>${input('photos', 'Upload photos', '', 'file', `accept="image/jpeg,image/png,image/webp" multiple id="product-photos" ${ownerLocked()}`)}</div><div class="subsection"><div class="section-heading"><h3 class="no-margin">Options & mixed boxes</h3><button type="button" class="button button-secondary" data-action="add-group">+ Add option group</button></div><p class="muted">A required count of 1 creates a single choice. Larger counts let customers build a mix. A box of six requires six selections in total; only the box quantity uses daily stock.</p><div>${p.option_groups.map((group, gi) => `<div class="option-group"><div class="section-heading"><strong>Option group ${gi + 1}</strong><button class="button button-quiet" type="button" data-action="remove-group" data-index="${gi}">Remove group</button></div><div class="field-row">${input(`group_label_${gi}`, 'Group name', group.label, 'text', 'required placeholder="Flavors, size, or packaging"')}${input(`group_count_${gi}`, 'Required selections per unit', group.required_count, 'number', 'required min="1" max="100" step="1"')}</div><div class="option-choices">${group.choices.map((choice, ci) => `<div class="option-choice">${input(`choice_label_${gi}_${ci}`, 'Choice name', choice.label, 'text', 'required')}${input(`choice_price_${gi}_${ci}`, 'Surcharge · PHP / choice', amount(choice.surcharge_cents), 'number', 'required min="0" step="0.01"')}${check(`choice_active_${gi}_${ci}`, 'Available', choice.active !== false)}<button type="button" class="icon-button" data-action="remove-choice" data-group="${gi}" data-index="${ci}" aria-label="Remove choice">×</button></div>`).join('')}</div><button type="button" class="button button-quiet" data-action="add-choice" data-index="${gi}">+ Add choice</button></div>`).join('')}</div></div>${actions(p.id ? 'Save product' : 'Create product')}</form>`);
   bindPhotoOrder();
   updateProductLabelPreview();
   for (const name of ['label_enabled', 'label_text', 'label_color']) {
     $('[data-form="product"]').elements.namedItem(name).addEventListener('input', updateProductLabelPreview);
   }
 }
-function categoriesDialog() {
-  showDialog('Menu categories', `${state.categories.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Category</th><th>Order</th><th></th></tr></thead><tbody>${state.categories.map(c => `<tr><td>${esc(c.name)}</td><td>${c.sort_order}</td><td><button class="table-link" data-action="edit-category" data-id="${esc(c.id)}">Edit</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Categories help customers browse your menu.</p>'}<div class="dialog-actions"><button class="button button-secondary" data-action="close-dialog">Done</button><button class="button" data-action="new-category" ${owner() ? '' : 'disabled'}>+ Add category</button></div>`);
+function catalogOrderDialog(kind) {
+  if (!showDialog(kind === 'products' ? 'Rearrange products' : 'Menu categories', '<div id="catalog-order-editor"></div>')) return;
+  catalogOrder = mountCatalogOrder($('#catalog-order-editor'), {
+    kind, items: state[kind], categories: state.categories, editable: !ownerLocked(), api, escapeHtml: esc, safeImage,
+    onSaved(items) { state[kind] = items; state.products = orderedCatalogProducts(state.products, state.categories); render(); },
+  });
 }
+function categoriesDialog() { catalogOrderDialog('categories'); }
+
 function categoryDialog(id) {
   const c = state.categories.find(item => item.id === id) || { name: '', sort_order: 0 };
-  showDialog(c.id ? 'Edit category' : 'Add category', `<form data-form="category" data-id="${esc(c.id || '')}">${formError}${input('name', 'Category name', c.name, 'text', 'required maxlength="100"')}${input('sort_order', 'Display order', c.sort_order, 'number', 'required step="1"')}${c.id ? `<button type="button" class="button button-quiet" data-action="delete-category" data-id="${esc(c.id)}" ${ownerLocked()}>Remove category</button><p class="help-text">Products remain in your catalog and become uncategorized.</p>` : ''}${actions(c.id ? 'Save category' : 'Add category')}</form>`);
+  showDialog(c.id ? 'Edit category' : 'Add category', `<form data-form="category" data-id="${esc(c.id || '')}">${formError}${input('name', 'Category name', c.name, 'text', 'required maxlength="100"')}${c.id ? `<button type="button" class="button button-quiet" data-action="delete-category" data-id="${esc(c.id)}" ${ownerLocked()}>Remove category</button><p class="help-text">Products remain in your catalog and become uncategorized.</p>` : ''}${actions(c.id ? 'Save category' : 'Add category')}</form>`);
 }
 function zoneDialog(id) {
   const z = state.zones.find(zone => zone.id === id) || { name: '', description: '', localities: [], fee_cents: 0, active: true };
@@ -568,6 +581,7 @@ async function onAction(button) {
     case 'new-product': openProduct(); break;
     case 'edit-product': openProduct(id); break;
     case 'categories': categoriesDialog(); break;
+    case 'reorder-products': if (!ownerLocked()) catalogOrderDialog('products'); break;
     case 'new-category': categoryDialog(); break;
     case 'edit-category': categoryDialog(id); break;
     case 'delete-category': showDialog('Remove category', `<form data-form="delete-category" data-id="${esc(id)}">${formError}<p class="muted">Remove this category? Its products remain in your catalog and become uncategorized.</p>${actions('Remove category')}</form>`); break;
@@ -791,10 +805,10 @@ async function submitForm(form) {
       if (productDraft.allow_same_day && productDraft.lead_days !== 0) throw new Error('Same-day orders require 0 full production days. Set full production days to 0, or turn off Allow same-day orders.');
       if (productDraft.label.enabled && !productDraft.label.text) throw new Error('Enter text for your product label, or turn the label off.');
       if (productDraft.option_groups.some(group => !group.choices.length || !group.choices.some(choice => choice.active))) throw new Error('Every option group needs at least one available choice.');
-      await api('save_product', { product: productDraft });
+      await api('save_product', { product: productDraft, preserve_order: true });
       closeDialog(); await refresh(); toast('Product saved.'); break;
     }
-    case 'category': await api('save_category', { category: { ...(form.dataset.id ? { id: form.dataset.id } : {}), name: fieldValue(form, 'name'), sort_order: Number(fieldValue(form, 'sort_order')) } }); closeDialog(); await refresh(); toast('Category saved.'); break;
+    case 'category': await api('save_category', { category: { ...(form.dataset.id ? { id: form.dataset.id } : {}), name: fieldValue(form, 'name') }, preserve_order: true }); closeDialog(); await refresh(); toast('Category saved.'); break;
     case 'delete-category': await api('delete_category', { id: form.dataset.id }); closeDialog(); await refresh(); toast('Category removed. Products are preserved.'); break;
     case 'zone': {
       const localities = [...new Set(list(fieldValue(form, 'localities')))];
