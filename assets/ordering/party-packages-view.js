@@ -7,5 +7,6 @@ export function packageCard(item, { preview = false } = {}) {
 }
 
 export function packageInclusions(inclusions) {
+  if (!inclusions.length) return '';
   return `<section class="party-inclusions" aria-label="Included in every package"><div><p class="party-eyebrow">Every package includes</p><h2>Ready for your celebration</h2></div><ul>${inclusions.map(item => `<li><strong>${packageEscape(item.label)}</strong>${item.detail ? `<span>${packageEscape(item.detail)}</span>` : ''}</li>`).join('')}</ul></section>`;
 }

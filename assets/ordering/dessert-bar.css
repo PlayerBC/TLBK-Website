@@ -1,0 +1,2 @@
+[data-event-service="dessert"] .cart-gallery-status:not(:empty){display:grid;place-content:center;min-height:360px;padding:35px;border:1px solid #e1d6c7;border-radius:8px;background:#efe5d5;text-align:center;line-height:1.8;color:#746053}
+@media(max-width:800px){[data-event-service="dessert"] .cart-gallery-status:not(:empty){min-height:230px}}

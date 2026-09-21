@@ -1,15 +1,17 @@
-import { packageCard, packagePrice, packageEscape as esc, packageInclusions } from './party-packages-view.js?v=details-swipe-1';
+import { eventPage } from './event-page.js?v=dessert-bar-1';
+import { packageCard, packagePrice, packageEscape as esc, packageInclusions } from './party-packages-view.js?v=dessert-bar-1';
 
-export function mountPartyPackageManager(root, { role, connected, api, cartApi }) {
+export function mountPartyPackageManager(root, { role, connected, api, cartApi, page = 'party' }) {
+  const service = eventPage(page);
   if (!connected || role !== 'owner') {
-    root.innerHTML = '<h1>Party packages</h1><p class="notice">Sign in with the owner account to add or edit party packages.</p>'; return;
+    root.innerHTML = `<h1>${esc(service.adminTitle)}</h1><p class="notice">Sign in with the owner account to add or edit ${service.packageName}s.</p>`; return;
   }
   let items = [], settings, cart, draft, mode, busy = false, operation;
   let loaded = false, dirty = false, returnFocus;
-  root.innerHTML = `<div class="view-heading"><div><span class="eyebrow">The Little Baker Kitchen</span><h1>Party packages</h1><p>Manage the packages and inclusions on your Party Carts page.</p></div><a class="button button-secondary" href="partycarts.html" target="_blank" rel="noopener">View party carts ↗</a></div>
+  root.innerHTML = `<div class="view-heading"><div><span class="eyebrow">The Little Baker Kitchen</span><h1>${esc(service.adminTitle)}</h1><p>Manage the packages and inclusions on your ${service.pageName} page.</p></div><a class="button button-secondary" href="${service.pageUrl}" target="_blank" rel="noopener">View ${service.pageName.toLowerCase()} ↗</a></div>
     <div class="row-actions party-manager-actions"><button class="button" type="button" data-party-new disabled>Add package</button><button class="button button-secondary" type="button" data-party-settings disabled>Edit shared inclusions</button><button class="button button-secondary" type="button" data-party-refresh>Refresh</button></div>
     <p data-party-message role="status" aria-live="polite"></p><div data-party-list class="party-admin-list"></div><div data-party-shared></div>
-    <section class="panel party-cart-admin"><div class="section-heading"><div><h2>Customize your own cart</h2><p>Edit the treats customers can choose for a custom party cart.</p></div><button type="button" class="button button-secondary" data-party-cart disabled>Edit cart items</button></div><p data-party-cart-message role="status"></p><ul data-party-cart-list class="party-cart-admin-list"></ul></section>
+    <section class="panel party-cart-admin"><div class="section-heading"><div><h2>Customize your own ${service.customName}</h2><p>Edit the treats customers can choose for a custom ${service.customName}.</p></div><button type="button" class="button button-secondary" data-party-cart disabled>Edit ${service.customName} items</button></div><p data-party-cart-message role="status"></p><ul data-party-cart-list class="party-cart-admin-list"></ul></section>
     <dialog class="party-editor" aria-labelledby="party-editor-title"><form data-party-form><div class="party-editor-top"><h2 id="party-editor-title"></h2><button type="button" class="icon-button" data-party-close aria-label="Close editor">×</button></div><div class="party-editor-layout"><div data-party-fields></div><aside><p class="eyebrow">Preview</p><div class="party-preview" data-party-preview></div></aside></div><p data-party-error role="alert"></p><div class="row-actions"><button type="submit" class="button">Save changes</button><button type="button" class="button button-secondary" data-party-close>Cancel</button></div></form></dialog>`;
   const $ = selector => root.querySelector(selector);
   const dialog = $('dialog'), form = $('[data-party-form]');
@@ -28,23 +30,23 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi }
     $('[data-party-list]').innerHTML = items.map(p => `<article class="party-admin-item panel"><div><span class="badge">${p.published ? 'Visible' : 'Hidden'}</span>${p.badge ? `<span class="party-admin-badge">${esc(p.badge)}</span>` : ''}<h2>${esc(p.name)}</h2><p>${esc(p.subtitle || p.features[0]?.label || '')}</p><small>Display order: ${p.sort_order} · ${p.features.length} inclusions</small></div><div class="party-admin-item-actions"><strong>${esc(packagePrice(p.price_cents))}</strong><div class="row-actions"><button class="button button-secondary" type="button" data-party-edit="${esc(p.id)}">Edit<span class="sr-only"> ${esc(p.name)}</span></button><button class="button button-danger" type="button" data-party-delete="${esc(p.id)}">Delete<span class="sr-only"> ${esc(p.name)}</span></button></div></div></article>`).join('') || '<p class="notice">No packages yet. Add your first package.</p>';
     $('[data-party-shared]').innerHTML = packageInclusions(settings.inclusions);
     $('[data-party-cart-list]').innerHTML = cart?.items.map(item => `<li>${esc(item)}</li>`).join('') || '';
-    if (cart) $('[data-party-cart-message]').textContent = cart.items.length ? `${cart.items.length} items · shown in this order on the website` : 'No items listed. Use Edit cart items to add treats.';
+    if (cart) $('[data-party-cart-message]').textContent = cart.items.length ? `${cart.items.length} items · shown in this order on the website` : `No items listed. Use Edit ${service.customName} items to add treats.`;
   }
   async function load() {
-    lock(true); message('Loading party packages…');
+    lock(true); message(`Loading ${service.packageName}s…`);
     try {
       const [packageResult, cartResult] = await Promise.allSettled([api('admin_list'), cartApi('admin_get')]);
       if (!root.isConnected) return;
       if (packageResult.status === 'rejected') throw packageResult.reason;
       const result = packageResult.value;
       cart = cartResult.status === 'fulfilled' ? cartResult.value : null;
-      if (!cart) $('[data-party-cart-message]').textContent = 'Cart items could not load. Use Refresh to try again.';
-      items = result.items; settings = result.settings; loaded = true; paint(); message('Saved changes appear on the Party Carts page. Hidden packages stay here for later.');
+      if (!cart) $('[data-party-cart-message]').textContent = 'Customization items could not load. Use Refresh to try again.';
+      items = result.items; settings = result.settings; loaded = true; paint(); message(`Saved changes appear on the ${service.pageName} page. Hidden packages stay here for later.`);
     } catch (error) { message(error.message || 'Packages could not load. Try Refresh.', true); }
     finally { lock(false); }
   }
   async function deletePackage(item) {
-    if (!item || !confirm(`Delete “${item.name}”?\n\nThis removes the package from your dashboard and the Party Carts page. This cannot be undone.`)) return;
+    if (!item || !confirm(`Delete “${item.name}”?\n\nThis removes the package from your dashboard and the ${service.pageName} page. This cannot be undone.`)) return;
     const index = items.findIndex(p => p.id === item.id);
     let deleted = false;
     lock(true); message(`Deleting “${item.name}”…`);
@@ -68,7 +70,7 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi }
     rows.forEach((row, i) => {
       row.querySelector('[data-feature-up]').disabled = i === 0;
       row.querySelector('[data-feature-down]').disabled = i === rows.length - 1;
-      row.querySelector('[data-feature-remove]').disabled = mode !== 'cart' && rows.length === 1;
+      row.querySelector('[data-feature-remove]').disabled = (mode === 'package' || (mode === 'settings' && !service.allowEmptyInclusions)) && rows.length === 1;
     });
     $('[data-feature-add]').disabled = rows.length >= (mode === 'cart' ? 100 : 30);
   }
@@ -86,7 +88,7 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi }
   function edit(item, shared = false) {
     mode = shared ? 'settings' : 'package';
     draft = structuredClone(item); operation = crypto.randomUUID(); markDirty(false); returnFocus = document.activeElement;
-    $('#party-editor-title').textContent = shared ? 'Shared inclusions' : item.revision === 0 ? 'Add party package' : `Edit ${item.name}`;
+    $('#party-editor-title').textContent = shared ? 'Shared inclusions' : item.revision === 0 ? `Add ${service.packageName}` : `Edit ${item.name}`;
     const features = shared ? item.inclusions : item.features;
     $('[data-party-fields]').innerHTML = (shared ? '<p>These inclusions appear once above all packages.</p>' : `${field('name', 'Package name', item.name, 'required maxlength="120"')}${field('subtitle', 'Subtitle <span class="muted">(optional)</span>', item.subtitle, 'maxlength="200"')}<div class="field-row">${field('price', 'Price (PHP)', (item.price_cents / 100).toFixed(2), 'type="number" min="0.01" max="1000000" step="0.01" required')}${field('sort_order', 'Display order', item.sort_order, 'type="number" min="0" max="10000" step="1" required')}</div><p class="muted">Lower display order appears first.</p>${field('badge', 'Badge <span class="muted">(optional)</span>', item.badge, 'maxlength="32" placeholder="Most Popular, New…"')}<label class="check-field"><input type="checkbox" name="published" ${item.published ? 'checked' : ''}>Show on website</label><h3>Package inclusions</h3><p class="muted">Add each serving, flavor choice or extra as an inclusion. Details are optional.</p>`) + `<div data-party-features>${features.map(featureRow).join('')}</div><button class="button button-secondary" type="button" data-feature-add>Add inclusion</button>`;
     $('[data-party-error]').textContent = ''; preview(); syncFeatureButtons(); dialog.showModal(); dialog.scrollTop = 0; form.querySelector('input')?.focus();
@@ -94,8 +96,8 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi }
   function editCart() {
     if (!cart) return;
     mode = 'cart'; draft = structuredClone(cart); operation = crypto.randomUUID(); markDirty(false); returnFocus = document.activeElement;
-    $('#party-editor-title').textContent = 'Customize your own cart items';
-    $('[data-party-fields]').innerHTML = `<p class="muted">Add, edit, remove, or move items to set the order customers see on your Party Carts page.</p><div data-party-features>${cart.items.map(label => featureRow({ label })).join('')}</div><button class="button button-secondary" type="button" data-feature-add>Add item</button>`;
+    $('#party-editor-title').textContent = `Customize your own ${service.customName} items`;
+    $('[data-party-fields]').innerHTML = `<p class="muted">Add, edit, remove, or move items to set the order customers see on your ${service.pageName} page.</p><div data-party-features>${cart.items.map(label => featureRow({ label })).join('')}</div><button class="button button-secondary" type="button" data-feature-add>Add item</button>`;
     $('[data-party-error]').textContent = ''; preview(); syncFeatureButtons(); dialog.showModal(); dialog.scrollTop = 0; (form.querySelector('input') || $('[data-feature-add]')).focus();
   }
   function close() {
@@ -131,7 +133,7 @@ export function mountPartyPackageManager(root, { role, connected, api, cartApi }
       if (mode === 'cart') cart = result;
       else if (mode === 'settings') settings = result;
       else { const index = items.findIndex(p => p.id === result.id); if (index < 0) items.push(result); else items[index] = result; }
-      markDirty(false); dialog.close(); paint(); message('Saved. Your Party Carts page now uses these details.');
+      markDirty(false); dialog.close(); paint(); message(`Saved. Your ${service.pageName} page now uses these details.`);
       (mode === 'cart' ? $('[data-party-cart]') : $('[data-party-new]')).focus();
     } catch (error) { $('[data-party-error]').textContent = error.message || 'Could not save. Your edits are still here; try again.'; }
     finally { lock(false); }

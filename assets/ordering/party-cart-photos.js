@@ -1,9 +1,11 @@
+import { eventPage } from './event-page.js?v=dessert-bar-1';
 import { config } from './config.js';
 import { enablePhotoSwipe } from './party-cart-swipe.js?v=details-swipe-1';
 import { packageEscape as esc } from './party-packages-view.js';
 import { startIdleSlideshow } from './party-cart-slideshow.js?v=details-swipe-1';
 import { slidingPhoto } from './party-cart-photo-transition.js?v=slide-3s-1';
 
+const service = eventPage(document.body.dataset.eventService);
 const root = document.querySelector('[data-cart-gallery]');
 if (root) {
   let items = [], index = 0, lightIndex = 0, returnFocus;
@@ -12,7 +14,7 @@ if (root) {
   const dialog = $('[data-cart-lightbox]');
   const photoTransition = slidingPhoto(image, $('[data-cart-image-error]'));
   const lightTransition = slidingPhoto($('[data-cart-light-image]'), $('[data-cart-light-error]'));
-  const caption = i => items[i]?.caption || `Party cart photo ${i + 1}`;
+  const caption = i => items[i]?.caption || `${service.photoName} photo ${i + 1}`;
   const cyclic = n => (n + items.length) % items.length;
   const slideshow = startIdleSlideshow(root, { next: () => show(index + 1), count: () => items.length });
   function revealThumb(container, button) {
@@ -65,10 +67,10 @@ if (root) {
   async function load() {
     $('[data-cart-gallery-retry]').hidden = true; viewer.hidden = true; items = [];
     photoTransition.clear(); lightTransition.clear();
-    status.textContent = 'Loading party cart photos…'; slideshow.restart();
+    status.textContent = `Loading ${service.photoName.toLowerCase()} photos…`; slideshow.restart();
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await fetch(`${config.supabaseUrl}/rest/v1/rpc/party_cart_photos_api`, {
+      const response = await fetch(`${config.supabaseUrl}/rest/v1/rpc/${service.photosApi}`, {
         method: 'POST', headers: { apikey: config.supabasePublishableKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ p_action: 'browse', p_payload: {} }), signal: controller.signal,
       });
@@ -83,7 +85,7 @@ if (root) {
       $('[data-cart-open-all]').textContent = `View all ${items.length} photos ↗`;
       viewer.hidden = false; show(0); slideshow.restart();
     } catch {
-      status.textContent = 'Party cart photos could not load. Please try again.'; $('[data-cart-gallery-retry]').hidden = false;
+      status.textContent = `${service.photoName} photos could not load. Please try again.`; $('[data-cart-gallery-retry]').hidden = false;
     } finally { clearTimeout(timeout); }
   }
   void load();

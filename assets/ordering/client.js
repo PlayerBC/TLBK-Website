@@ -137,6 +137,27 @@ export async function partyCartPhotosApi(action, payload = {}) {
   return data;
 }
 
+export async function dessertBarPackagesApi(action, payload = {}) {
+  const client = await connection();
+  const { data, error } = await client.rpc('dessert_bar_packages_api', { p_action: action, p_payload: payload });
+  if (error) throw new Error(error.message || 'The dessert bar packages could not be updated. Please try again.');
+  return data;
+}
+
+export async function dessertBarItemsApi(action, payload = {}) {
+  const client = await connection();
+  const { data, error } = await client.rpc('dessert_bar_items_api', { p_action: action, p_payload: payload });
+  if (error) throw new Error(error.message || 'The dessert bar items could not be updated. Please try again.');
+  return data;
+}
+
+export async function dessertBarPhotosApi(action, payload = {}) {
+  const client = await connection();
+  const { data, error } = await client.rpc('dessert_bar_photos_api', { p_action: action, p_payload: payload });
+  if (error) throw new Error(error.message || 'The dessert bar photos could not be updated. Please try again.');
+  return data;
+}
+
 export async function websiteVisitorStats({ signal } = {}) {
   return edge('website-analytics', {}, { signal, timeout: 45_000 });
 }

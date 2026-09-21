@@ -12,8 +12,9 @@ import { analyticsDateRange, buildAnalytics } from './analytics.js?v=customer-me
 import { renderAnalytics } from './analytics-view.js?v=customer-metrics-1';
 import { renderWebsiteVisitors, createVisitorPoller } from './website-visitors.js?v=visitors-2';
 import { mountGalleryManager } from './gallery-manager.js';
-import { mountPartyCartPhotos } from './party-cart-photos-manager.js?v=party-gallery-1';
-import { mountPartyPackageManager } from './party-package-manager.js?v=details-swipe-1';
+import { mountPartyCartPhotos } from './party-cart-photos-manager.js?v=dessert-bar-1';
+import { eventPage } from './event-page.js?v=dessert-bar-1';
+import { mountPartyPackageManager } from './party-package-manager.js?v=dessert-bar-1';
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
@@ -24,7 +25,7 @@ const CLOSED = new Set(['cancelled', 'expired', 'completed']);
 const PAYMENT = ['awaiting_payment', 'under_review', 'paid', 'rejected', 'cancelled'];
 const FULFILLMENT = ['pending_confirmation', 'confirmed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'completed', 'refunded', 'cancelled', 'expired'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const state = { view: location.hash === '#packages' ? 'packages' : 'overview', role: null, connected: false, products: [], categories: [], inventory: [], promos: [], zones: [], orders: [], settings: {}, staff: [], filters: { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }, inventoryDates: [manilaDate()], inventoryDrafts: {} };
+const state = { view: location.hash === '#dessert' ? 'dessert' : location.hash === '#packages' ? 'packages' : 'overview', role: null, connected: false, products: [], categories: [], inventory: [], promos: [], zones: [], orders: [], settings: {}, staff: [], filters: { search: '', payment: '', fulfillment: '', date: '', method: '', refund: '', upcoming: false }, inventoryDates: [manilaDate()], inventoryDrafts: {} };
 state.productFilters = { search: '', status: '', category: '' };
 state.promoFilter = '';
 state.printSelection = new Set();
@@ -128,11 +129,15 @@ async function refresh() {
 }
 function render() {
   $$('.sidebar-link').forEach(button => { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-current', button.dataset.view === state.view ? 'page' : 'false'); });
-  const views = { overview: overviewView, analytics: analyticsView, orders: ordersView, products: productsView, inventory: inventoryView, promos: promosView, settings: settingsView, team: teamView, galleries: () => '<div id="gallery-manager"></div>', packages: () => '<div id="party-package-manager"></div><div id="party-cart-photo-manager"></div>' };
+  const views = { overview: overviewView, analytics: analyticsView, orders: ordersView, products: productsView, inventory: inventoryView, promos: promosView, settings: settingsView, team: teamView, galleries: () => '<div id="gallery-manager"></div>', packages: () => '<div id="party-package-manager"></div><div id="party-cart-photo-manager"></div>', dessert: () => '<div id="party-package-manager"></div><div id="party-cart-photo-manager"></div>' };
   $('#workspace').innerHTML = setupNotice() + views[state.view]();
   if (state.view === 'galleries') mountGalleryManager($('#gallery-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=party-gallery-1')).galleryApi(...args), upload });
-  if (state.view === 'packages') mountPartyPackageManager($('#party-package-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=party-gallery-1')).partyPackagesApi(...args), cartApi: async (...args) => (await import('./client.js?v=party-gallery-1')).partyCartItemsApi(...args) });
-  if (state.view === 'packages') mountPartyCartPhotos($('#party-cart-photo-manager'), { role: state.role, connected: state.connected, api: async (...args) => (await import('./client.js?v=party-gallery-1')).partyCartPhotosApi(...args), upload });
+  if (['packages', 'dessert'].includes(state.view)) {
+    const page = state.view === 'dessert' ? 'dessert' : 'party', service = eventPage(page);
+    const invoke = name => async (...args) => (await import('./client.js?v=dessert-bar-1'))[name](...args);
+    mountPartyPackageManager($('#party-package-manager'), { role: state.role, connected: state.connected, page, api: invoke(service.packagesClient), cartApi: invoke(service.itemsClient) });
+    mountPartyCartPhotos($('#party-cart-photo-manager'), { role: state.role, connected: state.connected, page, api: invoke(service.photosClient), upload });
+  }
   syncOrderPrintSelection();
   syncVisitorPolling();
   syncPromoStatuses();
