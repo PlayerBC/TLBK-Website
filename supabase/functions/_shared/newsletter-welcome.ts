@@ -22,7 +22,7 @@ export function renderNewsletterWelcome(payload: any): { html: string; text: str
       throw new HttpError(503, "Newsletter welcome discount is invalid.");
     }
     const expiry = new Intl.DateTimeFormat("en-PH", {timeZone:"Asia/Manila",dateStyle:"long",timeStyle:"short"}).format(expires) + " PHT";
-    const terms = [['Valid for','30 days from signup'],['Minimum products','₱300'],['Maximum discount','₱100'],['Limit','one use only']];
+    const terms = [['Valid for','30 days from signup'],['Minimum purchase','₱300'],['Maximum discount','₱100'],['Limit','one use only']];
     const delivery = "Applies to products and option surcharges. Delivery fees are excluded from both the minimum spend and the discount.";
     const account = "Sign in with the email address receiving this message to use your code. One promo code per order.";
     offerText = `\n\nYour welcome gift: 5% off\n${offer.code}\n\n${terms.map(([label,value])=>`${label}: ${value}`).join('\n')}\n\n${delivery}\n\n${account}\n\nExpires: ${expiry}`;

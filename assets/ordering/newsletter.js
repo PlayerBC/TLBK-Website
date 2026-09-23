@@ -53,7 +53,7 @@ function formMarkup(source, id, email = '') {
   return `<form class="newsletter-form" data-newsletter-form data-source="${source}">
     <label class="newsletter-field" for="${id}-email">Email address<input id="${id}-email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" value="${escape(email)}" required></label>
     <div class="newsletter-trap" aria-hidden="true"><label>Leave this field empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-    <button class="newsletter-button" type="submit">Subscribe & get 5% off</button><dl class="newsletter-offer-terms" aria-label="Welcome discount terms"><div><dt>From signup</dt><dd>30 days</dd></div><div><dt>Minimum products</dt><dd>₱300</dd></div><div><dt>Maximum discount</dt><dd>₱100</dd></div><div><dt>Per subscriber</dt><dd>One use</dd></div></dl><p class="newsletter-fine newsletter-offer-note">Delivery fees excluded. Sign in with the same email. One promo code per order.</p>
+    <button class="newsletter-button" type="submit">Subscribe & get 5% off</button>
     <p class="newsletter-fine">By subscribing, you agree to receive occasional TLB emails about new treats, seasonal menus, and special offers. Unsubscribe anytime.</p>
     <p class="newsletter-status" data-newsletter-status role="status" hidden></p>
   </form>`;
@@ -114,7 +114,7 @@ export async function mountNewsletterPreferences(container, email) {
     rememberPreference(current);
     const optedIn = current === 'subscribed';
     container.innerHTML = `<h2>Email preferences</h2><p>Choose whether to receive the TLB newsletter. Your order and payment emails stay on.</p>
-      <form data-newsletter-preferences><label class="newsletter-check"><input type="checkbox" name="newsletter" ${optedIn ? 'checked' : ''}><span>Subscribe to TLB’s newsletter<small>New subscribers get a single-use 5% code: 30 days, ₱300 minimum products, up to ₱100 off, delivery excluded. More subscriber-only offers to follow. Unsubscribe anytime.</small></span></label>
+      <form data-newsletter-preferences><label class="newsletter-check"><input type="checkbox" name="newsletter" ${optedIn ? 'checked' : ''}><span>Subscribe to TLB’s newsletter<small>New subscribers get 5% off by email. Stay tuned for more subscriber-only offers. Unsubscribe anytime.</small></span></label>
       <p class="muted">${current === 'subscribed' ? 'You’re subscribed to the TLB newsletter.' : 'You’re not subscribed to the TLB newsletter.'}</p>
       <button class="newsletter-button" type="submit">Save email preference</button>
       <p class="newsletter-status" role="status" data-newsletter-status hidden></p></form>`;
