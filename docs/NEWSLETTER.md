@@ -2,6 +2,20 @@
 
 The newsletter is for new products, seasonal menus, and promotions. Account verification and order/payment/pickup emails continue independently. This feature captures consent and manages preferences; it does not create or send a marketing campaign.
 
+## Welcome discount and reporting · September 23, 2026
+
+New subscriber addresses receive one unique code in their welcome email: 5% off products and option surcharges, minimum product subtotal PHP 300, maximum discount PHP 100, delivery excluded. It expires exactly 30 days after activation and allows one paid redemption. Checkout requires a verified account with the same email address; buyer form fields cannot satisfy that restriction. Existing promo reservation and cancellation rules apply.
+
+New codes contain six uppercase letters/numbers, always with both types and without ambiguous I/O/0/1 characters. Generation retries collisions with any existing promo. Previously issued long codes remain valid. Signup leads with a bold **5% off** headline and a compact four-part terms panel; welcome emails show the code prominently and terms in aligned rows.
+
+The migration marks every existing subscriber row ineligible, including pending and previously unsubscribed addresses. Newly created rows default to eligible. Subscription activation, code issuance, the permanent subscriber-to-promo binding, and the welcome outbox entry commit together. Repeat signup or unsubscribe/rejoin cannot create a second code or reset its expiry. Old subscribers and rejoining subscribers still get the appropriate normal welcome without a new discount. Tokens and code details are not returned in public signup responses.
+
+The owner dashboard separates **Regular promo codes** and **Newsletter welcome codes**. Newsletter reporting includes all issued codes, including ones later disabled or deleted. Used counts paid redemptions even after cancellation/refund; reserved counts unpaid uses awaiting payment/review. Active codes are currently available to redeem; expired unused codes exclude used or still-reserved codes. Product sales are current paid product subtotals less discounts, excluding delivery, cancelled/expired orders and full-refund labels. Discounts given follow those same eligible orders. Figures are all time; Refresh reloads order changes and expiry statuses update automatically while the page is open.
+
+Backend deployed: migration `newsletter_welcome_discount` (remote version `20260923141444`, source `20260923140252_newsletter_welcome_discount.sql`), then `short_newsletter_welcome_codes` (remote version `20260923142529`, source `20260923141944_short_newsletter_welcome_codes.sql`), and email-worker v14. The newsletter endpoint remains v9. Deploy the email renderer before the SQL migrations on another environment, then publish the changed static files together. No existing subscribers were emailed. Live signup/issuance/report checks and two unique six-character code checks ran inside transactions and rolled back their fixtures; the six pre-existing subscriber records remained ineligible. Real inbox delivery was not exercised. Security advisories were unchanged.
+
+Validation: 216 backend checks, 68 Edge tests, offer metric unit tests, desktop/mobile dashboard and newsletter tests, and product-description/flavor checks at 1440px, 390px and 320px. `npm run test:newsletter` includes welcome rendering and dashboard coverage; run backend checks separately with `npm run test:backend`.
+
 ## Immediate signup rollout · September 19, 2026
 
 The immediate-subscription migration is installed, with newsletter Edge Function v9 and email-worker v12 active. Publish the matching homepage, shop, newsletter page, and account files together. The existing worker schedule runs every five minutes; welcome delivery uses that queue and may take a few minutes.

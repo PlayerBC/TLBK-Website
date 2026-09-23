@@ -57,3 +57,20 @@ test('welcome worker preserves suppression, sender configuration and stable retr
     }else{assert.equal(stats.accepted,1);assert.equal(sends.length,1);assert.ok(actions.includes('email_sent'));}
   }
 });
+
+test('new subscriber email includes the personal offer, full limits and exact Manila expiry in HTML and text',()=>{
+  const welcome_offer={code:'7K4M9Q',value:5,min_subtotal_cents:30000,cap_cents:10000,expires_at:'2026-10-23T06:00:00Z'};
+  const rendered=renderEmail({...payload,welcome_offer});
+  for(const content of [rendered.html,rendered.text]){
+    assert.match(content,/7K4M9Q/);assert.match(content,/5%/);
+    assert.match(content,/₱300/);assert.match(content,/₱100/);assert.match(content,/30 days/);
+    assert.match(content,/Delivery fees are excluded from both/);assert.match(content,/one use only/);
+    assert.match(content,/Sign in with the email address receiving this message/);
+    assert.match(content,/23 October 2026|October 23, 2026/);assert.match(content,/2:00\s*pm|2:00\s*PM/);
+    assert.match(content,/PHT/);assert.match(content,/newsletter subscribers/);assert.match(content,/#unsubscribe=/);
+  }
+  assert.deepEqual(renderEmail({...payload,welcome_offer}),rendered,'Retry content must be stable');
+  assert.match(renderEmail({...payload,welcome_offer:{...welcome_offer,code:'WELCOME-1234567890ABCDEF'}}).text,/WELCOME-1234567890ABCDEF/,'Previously issued codes stay supported');
+  assert.doesNotMatch(renderEmail(payload).text,/Your welcome gift/,'Existing subscribers get no promise of another code');
+  assert.throws(()=>renderEmail({...payload,welcome_offer:{...welcome_offer,code:'<script>'}}),/discount is invalid/);
+});

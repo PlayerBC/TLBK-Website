@@ -25,3 +25,9 @@ dialog.newsletter-dialog{width:min(460px,calc(100vw - 32px));max-height:calc(100
 .newsletter-preferences{margin:28px 0}.newsletter-preferences h2{margin-bottom:8px}.newsletter-preferences .newsletter-status{max-width:680px}.newsletter-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
 @media(max-width:640px){.newsletter-section-inner{grid-template-columns:1fr;gap:18px}.newsletter-section{padding:32px 22px}.newsletter-card{padding:24px}.newsletter-dialog .newsletter-title{font-size:29px}}
 
+
+.newsletter-title strong,.newsletter-card h1 strong{font-weight:800;color:#764b25}
+.newsletter-offer-terms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:18px 0 0;padding:15px 16px;background:#f6efe5;border:1px solid #e8dfd3;border-radius:10px}
+.newsletter-offer-terms dt{font-size:11px;color:#70584a;line-height:1.4;margin-bottom:3px}
+.newsletter-offer-terms dd{margin:0;font-size:16px;font-weight:700;line-height:1.4;color:#2f2624}
+.newsletter-offer-note{line-height:1.6}

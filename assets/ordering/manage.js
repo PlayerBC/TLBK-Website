@@ -1,3 +1,4 @@
+import { renderNewsletterPromos } from './newsletter-promos.js?v=welcome-offer-1';
 import { prepareProductImage, productImageAccept } from './product-image.js?v=webp-1';
 import { api, auth, ready, configured, money, escapeHtml, manilaDate, formatDate, toast, upload, websiteVisitorStats } from './client.js?v=party-gallery-1';
 import { prepareOrderSave, normalizeOrderEditReason } from './order-edit-save.js?v=custom-confirmation-1';
@@ -135,6 +136,8 @@ async function refresh() {
   if (!configured) return;
   const result = await api('admin_bootstrap');
   Object.assign(state, result, { connected: true, analyticsUpdatedAt: new Date().toISOString() });
+  const welcomeIds = new Set((state.newsletter_promos || []).map(promo => promo.id));
+  state.promos = state.promos.filter(promo => !welcomeIds.has(promo.id));
   state.products = orderedCatalogProducts(state.products, state.categories);
   state.categories.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name));
   const reviews = state.orders.filter(needsPaymentReview).length;
@@ -288,7 +291,9 @@ function syncPromoStatuses() {
   if (!results) return;
   const now = Date.now();
   results.innerHTML = promoResults(now);
-  const nextExpiry = state.promos.reduce((next, promo) => {
+  const welcome = $('#newsletter-promo-results');
+  if (welcome) welcome.innerHTML = renderNewsletterPromos(state.newsletter_promos || [], { money, escapeHtml: esc, dateTime, now });
+  const nextExpiry = [...state.promos, ...(state.newsletter_promos || [])].reduce((next, promo) => {
     const expires = Date.parse(promo.expires_at);
     return expires > now ? Math.min(next, expires) : next;
   }, Infinity);
@@ -308,7 +313,7 @@ function promoResults(now = Date.now()) {
 }
 function promosView() {
   return heading('A little treat', 'Promo codes for customers with verified email accounts.', `<button class="button" data-action="new-promo" ${owner() ? '' : 'disabled'}>+ Create promo code</button>`) + readonly() +
-    `<div class="filter-secondary">${select('promo-status-filter', 'Status', option('', 'All promo codes', state.promoFilter) + option('active', 'Active', state.promoFilter) + option('expired', 'Expired', state.promoFilter) + option('inactive', 'Inactive', state.promoFilter), 'id="promo-status-filter" aria-controls="promo-results" aria-describedby="promo-filter-help"')}<p id="promo-filter-help" class="muted">Inactive codes have not expired, but are disabled or not yet activated.</p></div><div id="promo-results">${promoResults()}</div><p class="muted">Discounts apply to products and option surcharges. Delivery fees are excluded. Paid and reserved uses both count toward the total limit. Reservations include orders awaiting payment or payment review; expired, rejected or cancelled unpaid orders release them. Paid cancellations and refunds remain counted.</p>`;
+    `<h2>Regular promo codes</h2><div class="filter-secondary">${select('promo-status-filter', 'Status', option('', 'All promo codes', state.promoFilter) + option('active', 'Active', state.promoFilter) + option('expired', 'Expired', state.promoFilter) + option('inactive', 'Inactive', state.promoFilter), 'id="promo-status-filter" aria-controls="promo-results" aria-describedby="promo-filter-help"')}<p id="promo-filter-help" class="muted">Inactive codes have not expired, but are disabled or not yet activated.</p></div><div id="promo-results">${promoResults()}</div><p class="muted">Discounts apply to products and option surcharges. Delivery fees are excluded. Paid and reserved uses both count toward the total limit. Reservations include orders awaiting payment or payment review; expired, rejected or cancelled unpaid orders release them. Paid cancellations and refunds remain counted.</p>${owner() ? '<div id="newsletter-promo-results"></div>' : ''}`;
 }
 function deletePromoDialog(id) {
   const promo = state.promos.find(item => item.id === id);

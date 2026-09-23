@@ -8,7 +8,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_PACKAGE_ROOT?join(process.env.PL
 const root=resolve(import.meta.dirname,'../..'),origin='https://flavors.test';
 const choice=(id,label,surcharge_cents=0)=>({id,label,surcharge_cents,active:true});
 const fixture={categories:[],inventory:[],zones:[],settings:{paused:false,production_weekdays:[0,1,2,3,4,5,6],fulfillment_weekdays:[0,1,2,3,4,5,6],blocked_dates:[],nonproduction_dates:[]},products:[{
-  id:'box',name:'Box of 4 Chunkies',description:'Choose your favorites.',active:true,price_cents:55000,min_quantity:1,lead_days:1,photos:[],option_groups:[
+  id:'box',name:'Box of 4 Chunkies',description:'Choose your favorites.\n\n• Baked fresh\n• Store chilled\n  Serving: <one> box',active:true,price_cents:55000,min_quantity:1,lead_days:1,photos:[],option_groups:[
     {id:'flavors',label:'Choose your flavor',required_count:4,choices:[choice('classic','Classic Chocochip'),choice('choco','Dark Choco Almond',1000),choice('matcha','Matchadamia',2000),choice('vanilla','Classic Vanilla'),{...choice('hidden','Unavailable'),active:false}]},
     {id:'extras',label:'Choose your extras',required_count:2,choices:[choice('caramel','Caramel',500),choice('chocolate','Chocolate')]},
     {id:'ribbon',label:'Choose a ribbon',required_count:1,choices:[choice('brown','Brown ribbon'),choice('rose','Rose ribbon',1000)]}
@@ -51,6 +51,11 @@ try{
     };
     await page.goto(origin+'/shop.html');
     await activate(page.locator('[data-product="box"]'));
+    assert.equal(await page.locator('#product-dialog .product-description').textContent(),fixture.products[0].description);
+    assert.equal(await page.locator('#product-dialog .product-description').evaluate(el=>getComputedStyle(el).whiteSpace),'pre-wrap');
+    assert.equal(await page.locator('#product-dialog .product-description one').count(),0,'Descriptions remain plain text');
+    assert.match(await page.locator('#product-dialog .help-card').textContent(),/Minimum order: 1 unit\./);
+    assert.doesNotMatch(await page.locator('#product-dialog').textContent(),/sellable unit/);
     assert.equal(await page.locator('[data-choice="hidden"]').count(),0);
     assert(await step('classic',-1).isDisabled());
     assert.equal(await input('classic').getAttribute('max'),'4');

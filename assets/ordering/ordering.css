@@ -59,3 +59,5 @@
 .option-stepper .option-count::-webkit-inner-spin-button,.option-stepper .option-count::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .option-stepper .option-count:disabled{background:#f3eee7;color:var(--muted);cursor:not-allowed}
 @media(max-width:380px){.option-choice{gap:8px}.option-choice-controls{flex-direction:column;gap:3px;align-items:flex-end}}
+
+.product-description{white-space:pre-wrap;overflow-wrap:anywhere}
