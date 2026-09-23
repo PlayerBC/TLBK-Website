@@ -10,11 +10,12 @@ const initial={role:'owner',orders:[],inventory:[],promos:[],zones:[],staff:[],s
 const client=await readFile(join(root,'assets/ordering/client.js'),'utf8'),helpers=client.slice(client.indexOf('export function money('));
 const mock=`export const configured=true,ready=Promise.resolve(),auth={getSession:async()=>({data:{session:{user:{id:'owner'}}}}),onAuthStateChange:()=>{}};
 const initial=${JSON.stringify(initial)}; const read=()=>JSON.parse(localStorage.getItem('catalog')||JSON.stringify(initial));
-export async function api(action,payload={}) {const data=read();if(action==='admin_bootstrap')return data;
+export async function api(action,payload={}) {const data=read();if(action==='admin_bootstrap')return data;if(action==='catalog')return {...data,settings:{paused:false,shop_name:'Test kitchen',production_weekdays:[0,1,2,3,4,5,6],fulfillment_weekdays:[0,1,2,3,4,5,6],blocked_dates:[],nonproduction_dates:[],pickup_address:'Test pickup',pickup_hours:'Daily'},inventory:[],zones:[]};
 window.calls??=[];window.calls.push({action,payload});if(data.role!=='owner')throw Error('Owner required');
 if(window.failOrder){window.failOrder=false;throw Error('Connection lost. Please retry.');}
 if(window.holdOrder)await new Promise(resolve=>window.releaseOrder=resolve);
 if(action==='reorder_catalog'){const before=data[payload.kind];data[payload.kind]=payload.ids.map((id,i)=>({...before.find(x=>x.id===id),sort_order:i+1}));localStorage.setItem('catalog',JSON.stringify(data));return {items:data[payload.kind]};}
+if(action==='reorder_product_categories'){for(const group of payload.groups)group.ids.forEach((id,i)=>{const item=data.products.find(x=>x.id===id);if(group.category_id)item.category_sort_orders={...(item.category_sort_orders||{}),[group.category_id]:i+1};else item.sort_order=i+1;});localStorage.setItem('catalog',JSON.stringify(data));return {items:data.products};}
 if(action==='save_category'||action==='save_product'){if(payload.preserve_order!==true)throw Error('Missing preserve_order');const kind=action==='save_category'?'categories':'products',item=payload.category||payload.product,existing=data[kind].find(x=>x.id===item.id);const saved={...item,id:item.id||'new-item',sort_order:existing?.sort_order??Math.max(0,...data[kind].map(x=>x.sort_order))+1};if(existing)Object.assign(existing,saved);else data[kind].push(saved);localStorage.setItem('catalog',JSON.stringify(data));return saved;}
 throw Error('Unexpected '+action);}
 export async function upload(){} export async function websiteVisitorStats(){return {}};${helpers}`;
@@ -54,7 +55,7 @@ try{
  await page.evaluate(()=>window.failOrder=true);await page.locator('[data-order-save]').click();await page.locator('[data-order-status]').filter({hasText:'Connection lost'}).waitFor();assert.deepEqual(await ids(page),['p1','p2','p3','p0','p4','p5','p6']);
  await page.evaluate(()=>window.holdOrder=true);await page.locator('[data-order-save]').click();await page.locator('[data-order-status]').filter({hasText:'Saving order'}).waitFor();await page.locator('#dialog-close').click();assert(await page.locator('#admin-dialog').isVisible());
  await page.evaluate(()=>{window.holdOrder=false;window.releaseOrder();});await page.locator('[data-order-status]').filter({hasText:'Order saved.'}).waitFor();
- const calls=await page.evaluate(()=>window.calls.filter(x=>x.action==='reorder_catalog'));assert.deepEqual(calls[0].payload,calls[1].payload);assert.equal(calls.length,2);
+ const calls=await page.evaluate(()=>window.calls.filter(x=>x.action==='reorder_product_categories'));assert.deepEqual(calls[0].payload,calls[1].payload);assert.equal(calls.length,2);
  await page.locator('#dialog-close').click();await menu(page);await page.locator('[data-action="reorder-products"]').click();assert.deepEqual(await ids(page),['p1','p2','p3','p0','p4','p5','p6']);await page.locator('#dialog-close').click();
  await page.locator('[data-action="categories"]').click();await drag(page,2,0);assert.deepEqual(await ids(page),['snack','cake','cookie']);
  await page.locator('[data-action="edit-category"]').first().click();assert(await page.locator('#catalog-order-editor').isVisible()); // Decline discarding unsaved order.
@@ -74,5 +75,28 @@ try{
  await long.locator('[data-order-group="0"] [data-order-handle="0"]').press('End');assert.equal((await ids(long)).at(-1),'long0');await long.locator('[data-order-reset]').click();assert.equal((await ids(long))[0],'long0');
  await long.locator('#dialog-close').click();await long.evaluate(initial=>localStorage.setItem('catalog',JSON.stringify({...initial,products:[],categories:[]})),initial);await menu(long);await long.locator('[data-action="categories"]').click();assert.equal(await long.locator('[data-order-handle]').count(),0);assert(await long.locator('[data-order-save]').isDisabled());
  const staff=await ctx.newPage();await staff.goto(origin+'/manage.html');await staff.evaluate(initial=>localStorage.setItem('catalog',JSON.stringify({...initial,role:'staff'})),initial);await menu(staff);assert(await staff.locator('[data-action="reorder-products"]').isDisabled());await staff.locator('[data-action="categories"]').click();assert.equal(await staff.locator('[data-order-handle]:enabled').count(),0);
+ const multiContext=await context(),multi=await multiContext.newPage();await menu(multi);
+ await multi.locator('[data-action="edit-product"][data-id="p0"]').click();
+ assert.equal(await multi.locator('[name="category_ids"]:checked').count(),1);
+ await multi.locator('[name="category_ids"][value="cookie"]').check();
+ await multi.locator('form[data-form="product"] button[type="submit"]').click();
+ await multi.locator('#admin-dialog').waitFor({state:'hidden'});
+ await multi.locator('[data-product-filter="category"]').selectOption('cookie');
+ assert.equal(await multi.locator('.product-card').count(),2);
+ await multi.locator('[data-action="reorder-products"]').click();
+ assert.equal(await multi.locator('[data-order-id="p0"]').count(),2);
+ assert.deepEqual(await ids(multi),['p0','p1','p2','p3','p0','p4','p5','p6']);
+ await drag(multi,0,2);
+ assert.deepEqual(await ids(multi),['p1','p2','p0','p3','p0','p4','p5','p6']);
+ await multi.locator('[data-order-save]').click();
+ await multi.locator('[data-order-status]').filter({hasText:'Order saved.'}).waitFor();
+ await multi.locator('#dialog-close').click();
+ await multi.goto(origin+'/shop.html');
+ await multi.locator('[data-shop-category="cake"] [data-product="p0"]').waitFor();
+ assert.equal(await multi.locator('[data-shop-category="cake"] [data-product="p0"]').count(),1);
+ assert.equal(await multi.locator('[data-shop-category="cookie"] [data-product="p0"]').count(),1);
+ await multi.locator('[data-category="cookie"]').click();
+ assert.equal(await multi.locator('#product-grid [data-product="p0"]').count(),1);
+ await multiContext.close();
  assert.deepEqual(errors,[]);console.log('PASS product/category mouse, touch and keyboard reordering; cancel/reset; save retry and busy/dirty guards; filters; saved reload; ordinary edits retain order; new categories append; staff denial; mobile layout.');
 }finally{await browser.close();}

@@ -1,4 +1,4 @@
-import {catalogProductGroups} from './catalog-ordering.js?v=drag-order-1';
+import {catalogProductGroups,productCategoryIds} from './catalog-ordering.js?v=multi-category-1';
 import {fulfillmentStatus} from './refund-status.js?v=refund-status-1';
 import {mountCustomerCalendar} from './customer-calendar.js?v=daily-quantities-1';
 import {syncCheckoutFields,socialContactMessage} from './checkout-fields.js?v=social-contact-1';
@@ -64,7 +64,7 @@ function renderShop(){
   $('#menu-search').oninput=e=>{query=e.target.value;renderProducts()};
 }
 function renderProducts(){
-  const products=catalog.products.filter(p=>p.active&&(category==='all'||p.category_id===category)&&`${p.name} ${p.description}`.toLowerCase().includes(query.toLowerCase()));
+  const products=catalog.products.filter(p=>p.active&&(category==='all'||productCategoryIds(p,catalog.categories).includes(category))&&`${p.name} ${p.description}`.toLowerCase().includes(query.toLowerCase()));
   const grid=$('#product-grid'),grouped=category==='all'&&products.length>0;
   grid.classList.toggle('product-grid',!grouped);
   grid.innerHTML=grouped?catalogProductGroups(products,catalog.categories).map((group,index)=>`<section class="shop-category" data-shop-category="${esc(group.id)}" aria-labelledby="shop-category-${index}"><h3 class="shop-category-heading" id="shop-category-${index}">${esc(group.name)}</h3><div class="product-grid">${group.items.map(p=>productCard(p,true)).join('')}</div></section>`).join(''):products.length?products.map(p=>productCard(p)).join(''):`<div class="panel empty-state" style="grid-column:1/-1"><div class="empty-icon">${icon}</div><h3>${query?'No treats found':'Something lovely is on its way'}</h3><p>${query?'Try another name or category.':'Our ordering menu is being prepared. Come back soon to see what’s baking.'}</p>${!configured&&!demo?'<a class="button-secondary" href="shop.html?demo=1">Explore sample menu</a>':''}</div>`;

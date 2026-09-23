@@ -26,7 +26,9 @@ export default async function({db,check,state}) {
     for(const [index,item] of reordered.entries()) {
       assert.equal(item.sort_order,index+1);
       const original=products.find(x=>x.id===item.id);
-      assert.deepEqual({...item,sort_order:original.sort_order},{...original});
+      const {category_sort_orders: actualPositions,...actualDetails}=item;
+      const {category_sort_orders: previousPositions,...previousDetails}=original;
+      assert.deepEqual({...actualDetails,sort_order:original.sort_order},previousDetails);
     }
     assert.deepEqual((await save(p)).items,reordered); // Lost response retry.
     const shop=await h.api('catalog');
