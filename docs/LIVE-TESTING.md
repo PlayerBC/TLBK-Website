@@ -3,7 +3,11 @@
 Brent has chosen to test the ordering system at https://thelittlebakerkitchen.com.
 Use this guide instead of the private-preview addresses in SETUP.md.
 
-## Current progress
+The initial setup record below is historical. The site is now live; see the September 23
+email acceptance in section 4 and [AUTH-EMAILS.md](AUTH-EMAILS.md). Do not repeat initial
+account, deployment or payment-setting changes on the operating shop.
+
+## Initial setup record
 
 - The existing website works over HTTPS. The www address redirects to the root domain.
 - GitHub Pages publishes the original repository's `main` branch, from `/(root)`.
@@ -27,8 +31,9 @@ In **Supabase → TLB Kitchen System → Authentication → URL Configuration**,
 | Redirect URL, second entry | `https://thelittlebakerkitchen.com/reset-password.html` |
 
 Add the redirects separately, without wildcards. This live-only testing route does not need preview redirects.
-Keep email signup and Confirm email enabled. Keep the default confirmation and recovery
-templates, including `{{ .ConfirmationURL }}`, intact.
+Keep email signup and Confirm email enabled. The account confirmation template is now
+branded as described in [AUTH-EMAILS.md](AUTH-EMAILS.md). Preserve `{{ .ConfirmationURL }}`
+when changing confirmation or recovery templates.
 
 Next, open **Edge Functions → Secrets** and edit `ALLOWED_ORIGINS` to this single value:
 
@@ -109,10 +114,23 @@ Keep **Pause new orders** checked while setting up. Enter clearly labelled test 
 instructions; no bank transfer is needed for the test.
 
 Automatic processing is already configured in TLB Kitchen System. The job
-`tlb-order-maintenance-and-email` is active with schedule `*/5 * * * *`.
-Its worker authenticated and completed an empty-queue test successfully. You can skip
-recreating Step 9 for this project. Fulfillment reminders remain disabled until you choose
-to enable them in Shop settings.
+`tlb-order-maintenance-and-email` is active with schedule `* * * * *` (updated September 23).
+You can skip recreating Step 9 for this project. Fulfillment reminders are enabled for
+08:00 Asia/Manila on the fulfillment date. They apply to paid, active orders. A qualifying
+order added after that time is picked up on a later worker run. Ready-for-pickup messages
+are separate notifications queued when staff changes the fulfillment status.
+
+Live email acceptance on September 23 used four clearly labelled temporary database
+fixtures without payments or inventory allocations. The natural scheduler sent exactly
+one due reminder for the active paid pickup order, and none for the unpaid, completed
+or future-date controls. Updating the active fixture to ready-for-pickup and invoking the
+normal email queue function delivered the corresponding notification on the next cron
+run. This tested scheduling, preparation and delivery; it did not exercise the staff UI
+button or payment approval. Both messages were reported delivered by Resend, contained
+pickup instructions and a working order link, and repeated cron runs sent no duplicate.
+All fixture orders, outbox/history rows, test accounts and private test credentials were
+removed afterward. Customer orders, stock, payment records and shop settings were unchanged.
+Eight targeted email/worker regression tests also passed.
 
 Then follow **Step 10 of SETUP.md**, using the live shop address:
 
@@ -274,8 +292,8 @@ that migration as proof of restricted SQL-role access to `net`. The connected
 `postgres` role does not own those managed objects. Do not expose `net` or add an
 arbitrary-SQL RPC; further changes to managed grants require Supabase support.
 
-Queued messages and real orders are still empty. The worker test verifies connectivity
-and maintenance, not delivery to an inbox.
+At initial setup, queued messages and real orders were empty. That worker test verified
+connectivity and maintenance. The later live delivery checks are recorded in section 4.
 
 ## References
 

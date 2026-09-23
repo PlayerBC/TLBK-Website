@@ -4,6 +4,12 @@ The signup confirmation template is [supabase/templates/confirmation.html](../su
 
 Both confirmation links retain Supabase's `{{ .ConfirmationURL }}` placeholder. Supabase generates the recipient's verification link when it sends the message. This template does not change account verification, redirects, newsletter consent, or welcome-code eligibility. Newsletter subscribers still join immediately; this email confirms a newly created customer account.
 
+## Live acceptance · September 23, 2026
+
+The owner saved the hosted template. A fresh signup at 15:51 UTC received the branded message from `orders@thelittlebakerkitchen.com`; Resend reported delivery. The actual sent HTML included the existing public logo URL and both confirmation links. Rendering that HTML loaded the logo successfully. The emailed confirmation link verified the temporary account, sign-in worked, and the test session was signed out before removing the account. Earlier test emails still used the default template; the later branded message confirms the saved version is now active.
+
+The logo was reported missing in Supabase's dashboard preview. The public image returned HTTP 200 with valid PNG data with no referrer, a Supabase referrer, and a Gmail referrer. The actual delivered HTML rendered it correctly in Chrome. This verifies the asset and HTML; it is not a screenshot of Gmail's inbox rendering.
+
 ## Apply to the hosted project
 
 1. Open **Authentication → Email Templates → Confirm signup** in the [TLB Supabase project](https://supabase.com/dashboard/project/aulhqofjjckwwjmdvqgi/auth/templates).
@@ -14,7 +20,7 @@ Both confirmation links retain Supabase's `{{ .ConfirmationURL }}` placeholder. 
 
 Use the existing Resend SMTP configuration and `orders@thelittlebakerkitchen.com` sender for account emails. The newsletter uses `news@thelittlebakerkitchen.com` independently.
 
-Hosted Auth templates are stored in Supabase, separately from the website. Publishing this repository does not update the hosted email template. The connected database/Edge tools cannot edit Auth email configuration; applying it through the dashboard remains necessary. Do not push the full local `config.toml` to production: its development URLs are intentionally localhost.
+Hosted Auth templates are stored in Supabase, separately from the website. Publishing this repository does not update the hosted email template. The connected database/Edge tools cannot edit Auth email configuration; future changes also need to be saved through the dashboard. Do not push the full local `config.toml` to production: its development URLs are intentionally localhost.
 
 ## Local preview
 
