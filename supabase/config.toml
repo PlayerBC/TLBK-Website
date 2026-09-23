@@ -27,6 +27,10 @@ double_confirm_changes = true
 max_frequency = "60s"
 otp_expiry = 3600
 
+[auth.email.template.confirmation]
+subject = "Confirm your email | The Little Baker Kitchen"
+content_path = "./supabase/templates/confirmation.html"
+
 # Gateway JWT checks cannot authorize guest order tokens or modern public keys.
 # Each function implements its own order/staff/worker authorization explicitly.
 [functions.proof-upload]

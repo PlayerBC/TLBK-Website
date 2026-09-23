@@ -2,6 +2,16 @@
 
 The newsletter is for new products, seasonal menus, and promotions. Account verification and order/payment/pickup emails continue independently. This feature captures consent and manages preferences; it does not create or send a marketing campaign.
 
+## Live delivery and checkout acceptance · September 23, 2026
+
+The existing `tlb-order-maintenance-and-email` Cron job now runs every minute (`* * * * *`). Its ID, active state and HTTP command were preserved; no duplicate job was added. Consecutive minute-level runs succeeded. Queue backlogs, retries and provider limits can still delay inbox delivery beyond one minute.
+
+A fresh owner-controlled email alias subscribed through the live website and received its welcome email from `TLB Newsletter <news@thelittlebakerkitchen.com>`. Resend reported delivery. The message included its unique six-character code and every offer term. Repeating signup created no additional welcome email or code. An address first subscribed before the offer rollout correctly received no new code.
+
+Live browser checkout with a verified matching account passed: PHP490 pickup subtotal gave PHP24.50 off; PHP2,205 subtotal capped the discount at PHP100; PHP490 products plus PHP300 delivery still gave only PHP24.50 off. PHP245 in products failed the minimum for both pickup and delivery, even when the delivery fee raised the overall total above PHP300. Successful cases were also checked on the order review screen. No order or payment was submitted, and the code stayed unused. The temporary account was signed out and removed after testing. Backend regression checks passed (216 checks, 30 migrations).
+
+Current deployed functions are newsletter v10 and email-worker v16. Account signup confirmation uses the separate Supabase Auth email template; see [AUTH-EMAILS.md](AUTH-EMAILS.md) for its branded template and hosted setup.
+
 ## Welcome discount and reporting · September 23, 2026
 
 New subscriber addresses receive one unique code in their welcome email: 5% off products and option surcharges, minimum product subtotal PHP 300, maximum discount PHP 100, delivery excluded. It expires exactly 30 days after activation and allows one paid redemption. Checkout requires a verified account with the same email address; buyer form fields cannot satisfy that restriction. Existing promo reservation and cancellation rules apply.
@@ -18,7 +28,7 @@ Validation: 216 backend checks, 68 Edge tests, offer metric unit tests, desktop/
 
 ## Immediate signup rollout · September 19, 2026
 
-The immediate-subscription migration is installed, with newsletter Edge Function v9 and email-worker v12 active. Publish the matching homepage, shop, newsletter page, and account files together. The existing worker schedule runs every five minutes; welcome delivery uses that queue and may take a few minutes.
+At this rollout, the immediate-subscription migration, newsletter Edge Function v9 and email-worker v12 were installed. Publish the matching homepage, shop, newsletter page, and account files together. The worker initially ran every five minutes; the current interval is one minute, as recorded above.
 
 Validation: 169 database checks, 67 Edge tests, newsletter browser scenarios, and the static build pass. A production transaction verified activation plus one queued welcome and duplicate handling, then rolled back its fixture. Live inert requests verified the new response and rejected invalid email, unauthenticated preferences, and unauthorized worker calls. Existing subscriber, pending subscriber, order, and outbox counts were unchanged. Security advisor findings match the prior baseline. Real inbox delivery was not exercised during this rollout; no test email or campaign was sent.
 

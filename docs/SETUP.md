@@ -1,6 +1,6 @@
 # Beginner setup guide: TLB Kitchen ordering draft
 
-> **Current route for Brent:** DNS and HTTPS are restored, and testing will use the existing website. Follow [LIVE-TESTING.md](LIVE-TESTING.md) for the remaining steps and exact live URLs. The original private preview could not be republished. The database, three backend functions and five-minute automatic processing are already installed in **TLB Kitchen System**; do not reinstall them. Return to Steps 8 and 10 below for the test product and order checks, using the live shop address.
+> **Current route for Brent:** DNS and HTTPS are restored, and testing will use the existing website. Follow [LIVE-TESTING.md](LIVE-TESTING.md) for the remaining steps and exact live URLs. The original private preview could not be republished. The database, three backend functions and one-minute automatic processing are already installed in **TLB Kitchen System**; do not reinstall them. Return to Steps 8 and 10 below for the test product and order checks, using the live shop address.
 
 This guide is for Brent, starting with no website setup experience. You do not need to write the website code. You will create service accounts, enter settings, and copy a few prepared commands.
 
@@ -356,7 +356,7 @@ In **Shop settings → Delivery zones → + Add zone**, enter Zone name `DEMO de
 
 **Goal:** send queued order emails, expire unpaid orders and check reminders without leaving a browser open.
 
-A *scheduler*, also called Cron, runs the email worker every five minutes. [Supabase scheduling](https://supabase.com/docs/guides/functions/schedule-functions).
+A *scheduler*, also called Cron, runs the email worker every minute. The existing production job was updated in place on September 23, 2026. [Supabase scheduling](https://supabase.com/docs/guides/functions/schedule-functions).
 
 When a customer submits valid payment proof and the order becomes **Under review**, every verified account assigned **Staff** or **Owner** receives an individual review email. Recipients follow the accounts in **Staff access** automatically; the business contact email is not the recipient list. These notifications include the order reference, customer name, fulfillment date/method, ordered products with quantities and selected options, unit and line prices, subtotal, discount and promo code (when present), delivery fee, order total, and a link to the admin dashboard, where staff sign-in is required. They are independent of the fulfillment-day reminder setting.
 
@@ -392,7 +392,7 @@ Run this in SQL Editor. There are **no placeholders to replace** in this box:
 ```sql
 select cron.schedule(
   'tlb-order-maintenance-and-email',
-  '*/5 * * * *',
+  '* * * * *',
   $job$
   select net.http_post(
     url := (select decrypted_secret from vault.decrypted_secrets
@@ -418,11 +418,11 @@ select jobname, schedule, active from cron.job
 where jobname = 'tlb-order-maintenance-and-email';
 ```
 
-**You are done when:** one job appears with schedule `*/5 * * * *` and `active` true. An active job alone does not prove email delivery; Step 10 checks that.
+**You are done when:** one job appears with schedule `* * * * *` and `active` true. An active job alone does not prove email delivery; Step 10 checks that.
 
-Allow several minutes for order email. Each run processes up to three messages; larger queues take more runs. Provider limits apply to account and order mail. Keep this five-minute interval for initial setup.
+The worker checks for queued order and newsletter emails every minute. Each run processes up to three messages; larger queues, retries and provider limits can add delivery time. Account confirmation emails use Supabase Auth's SMTP flow separately.
 
-New orders have a 15-minute payment-proof deadline. Orders placed before this change keep their original deadline. Expired unpaid reservations are released before the next successful shop or checkout API response; scheduled maintenance also cleans them up every five minutes. A proof received on time stays **Under review** until staff acts, even after the deadline. Reminders apply to active paid orders due that day in **Asia/Manila**.
+New orders have a 15-minute payment-proof deadline. Orders placed before this change keep their original deadline. Expired unpaid reservations are released before the next successful shop or checkout API response; scheduled maintenance also cleans them up every minute. A proof received on time stays **Under review** until staff acts, even after the deadline. Reminders apply to active paid orders due that day in **Asia/Manila**.
 
 For an already-open shop, publish the matching website payment instructions before activating the shorter backend deadline. A shorter deadline reduces unpaid stock holds, but guest repeat orders and unverified receipt uploads still need separate abuse controls. The system does not automatically verify that an uploaded receipt represents a real payment.
 
