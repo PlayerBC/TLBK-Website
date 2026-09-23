@@ -82,10 +82,52 @@ async function loadInventory(){try{const next=await api('catalog',{date:state.fu
 function openProduct(id){
   const p=catalog.products.find(p=>p.id===id),dialog=$('#product-dialog'),a=availability(p,state.fulfillment_date,catalog.settings,catalog.inventory,new Date(),state.method);
   const selected=Object.fromEntries((p.option_groups||[]).map(g=>[g.id,{}]));
-  dialog.innerHTML=`<div class="modal-head"><span class="eyebrow">${demo?'Sample product':'Made just for you'}</span><button class="close-button" aria-label="Close product">×</button></div><div class="modal-content"><div class="product-dialog-layout"><div>${p.photos?.length?`<img id="detail-photo" class="product-dialog-image" src="${safeImage(p.photos[0])}" alt="${esc(p.name)}"><div class="photo-thumbs">${p.photos.map((photo,i)=>`<button data-photo="${i}" aria-label="View photo ${i+1}"><img src="${safeImage(photo)}" alt=""></button>`).join('')}</div>`:placeholder()}<div class="help-card"><strong>Freshly made, with a little notice</strong>${p.lead_days} full production day${p.lead_days===1?'':'s'} required.<br>Earliest available: ${esc(earliestFor(p))}.<br>Minimum order: ${p.min_quantity} sellable unit${p.min_quantity===1?'':'s'}.</div></div><div><h2 id="product-title">${esc(p.name)}</h2>${allowsSameDay(p)?'<div class="notice">Same-day orders are available before our order cutoff, subject to stock and pickup or delivery availability. Every product in your basket must be eligible for same-day orders.</div>':''}${p.pickup_only===true?'<div class="notice">This product is available for pickup only. Orders containing it must be collected from the kitchen.</div>':''}<p class="muted">${esc(p.description)}</p><div class="product-price" id="detail-price">${money(p.price_cents)}</div>${(p.option_groups||[]).map((g,gi)=>`<fieldset class="option-group"><legend>${esc(g.label)} <small class="muted">· Choose ${g.required_count}</small></legend>${g.choices.filter(c=>c.active!==false).map(c=>`<div class="option-choice">${g.required_count===1?`<label><input type="radio" name="group-${gi}" data-group="${esc(g.id)}" data-choice="${esc(c.id)}" value="1"> ${esc(c.label)}</label>`:`<label for="choice-${esc(g.id)}-${esc(c.id)}">${esc(c.label)}</label>`}<span><small>${c.surcharge_cents?'+'+money(c.surcharge_cents):money(0)}</small>${g.required_count!==1?` &nbsp;<input id="choice-${esc(g.id)}-${esc(c.id)}" class="option-count" type="number" min="0" max="${g.required_count}" value="0" step="1" data-group="${esc(g.id)}" data-choice="${esc(c.id)}" aria-label="${esc(c.label)} quantity">`:''}</span></div>`).join('')}<div class="muted" data-group-count="${esc(g.id)}" style="font-size:11px;margin-top:8px">0 of ${g.required_count} selected</div></fieldset>`).join('')}<div class="notice ${a.available?'':'danger'}" style="margin-top:20px">${!a.available||state.fulfillment_date?esc(a.reason):'Choose your fulfillment date in the menu to check availability.'}</div><div id="product-error" role="alert"></div><div class="product-dialog-bottom"><label class="field no-margin" style="max-width:85px">Quantity<input id="product-quantity" type="number" min="1" max="999" step="1" value="1"></label><button id="add-to-cart" class="button" ${!a.available?'disabled':''}>Add to basket · ${money(p.price_cents)}</button></div></div></div></div>`;
+  dialog.innerHTML=`<div class="modal-head"><span class="eyebrow">${demo?'Sample product':'Made just for you'}</span><button class="close-button" aria-label="Close product">×</button></div><div class="modal-content"><div class="product-dialog-layout"><div>${p.photos?.length?`<img id="detail-photo" class="product-dialog-image" src="${safeImage(p.photos[0])}" alt="${esc(p.name)}"><div class="photo-thumbs">${p.photos.map((photo,i)=>`<button data-photo="${i}" aria-label="View photo ${i+1}"><img src="${safeImage(photo)}" alt=""></button>`).join('')}</div>`:placeholder()}<div class="help-card"><strong>Freshly made, with a little notice</strong>${p.lead_days} full production day${p.lead_days===1?'':'s'} required.<br>Earliest available: ${esc(earliestFor(p))}.<br>Minimum order: ${p.min_quantity} sellable unit${p.min_quantity===1?'':'s'}.</div></div><div><h2 id="product-title">${esc(p.name)}</h2>${allowsSameDay(p)?'<div class="notice">Same-day orders are available before our order cutoff, subject to stock and pickup or delivery availability. Every product in your basket must be eligible for same-day orders.</div>':''}${p.pickup_only===true?'<div class="notice">This product is available for pickup only. Orders containing it must be collected from the kitchen.</div>':''}<p class="muted">${esc(p.description)}</p><div class="product-price" id="detail-price">${money(p.price_cents)}</div>${(p.option_groups||[]).map((g,gi)=>`<fieldset class="option-group"><legend>${esc(g.label)} <small class="muted">· Choose ${g.required_count}</small></legend>${g.choices.filter(c=>c.active!==false).map(c=>`<div class="option-choice">${g.required_count===1?`<label><input type="radio" name="group-${gi}" data-group="${esc(g.id)}" data-choice="${esc(c.id)}" value="1"> ${esc(c.label)}</label>`:`<label for="choice-${esc(g.id)}-${esc(c.id)}">${esc(c.label)}</label>`}<span class="option-choice-controls"><small>${c.surcharge_cents?'+'+money(c.surcharge_cents):money(0)}</small>${g.required_count!==1?`<span class="option-stepper"><button type="button" data-option-delta="-1" aria-label="Decrease ${esc(c.label)} quantity" disabled>&minus;</button><input id="choice-${esc(g.id)}-${esc(c.id)}" class="option-count" type="number" inputmode="numeric" min="0" max="${g.required_count}" value="0" step="1" data-group="${esc(g.id)}" data-choice="${esc(c.id)}" aria-label="${esc(c.label)} quantity"><button type="button" data-option-delta="1" aria-label="Increase ${esc(c.label)} quantity">+</button></span>`:''}</span></div>`).join('')}<div class="muted" data-group-count="${esc(g.id)}" aria-live="polite" aria-atomic="true" style="font-size:11px;margin-top:8px">0 of ${g.required_count} selected</div></fieldset>`).join('')}<div class="notice ${a.available?'':'danger'}" style="margin-top:20px">${!a.available||state.fulfillment_date?esc(a.reason):'Choose your fulfillment date in the menu to check availability.'}</div><div id="product-error" role="alert"></div><div class="product-dialog-bottom"><label class="field no-margin" style="max-width:85px">Quantity<input id="product-quantity" type="number" min="1" max="999" step="1" value="1"></label><button id="add-to-cart" class="button" ${!a.available?'disabled':''}>Add to basket · ${money(p.price_cents)}</button></div></div></div></div>`;
   dialog.querySelector('.close-button').onclick=()=>dialog.close();dialog.querySelectorAll('[data-photo]').forEach(b=>b.onclick=()=>$('#detail-photo').src=p.photos[+b.dataset.photo]);
-  function refresh(){let price=Number(p.price_cents);for(const g of p.option_groups||[]){for(const c of g.choices)price+=c.surcharge_cents*Number(selected[g.id][c.id]||0);dialog.querySelector(`[data-group-count="${CSS.escape(g.id)}"]`).textContent=`${Object.values(selected[g.id]).reduce((a,b)=>a+b,0)} of ${g.required_count} selected`};$('#detail-price').textContent=money(price);$('#add-to-cart').textContent=`Add to basket · ${money(price*Number($('#product-quantity').value||1))}`}
-  dialog.querySelectorAll('[data-group]').forEach(input=>input.oninput=()=>{const g=input.dataset.group;if(input.type==='radio')selected[g]={};selected[g][input.dataset.choice]=Number(input.value)||0;refresh()});$('#product-quantity').oninput=refresh;
+  function refresh(){
+    let price=Number(p.price_cents);
+    for(const g of p.option_groups||[]){
+      const total=Object.values(selected[g.id]).reduce((sum,count)=>sum+count,0);
+      const remaining=Math.max(0,g.required_count-total);
+      for(const c of g.choices)price+=c.surcharge_cents*Number(selected[g.id][c.id]||0);
+      dialog.querySelector('[data-group-count="'+CSS.escape(g.id)+'"]').textContent=
+        total+' of '+g.required_count+' selected'+(remaining===0&&g.required_count!==1?' · Reduce a quantity to choose another option.':'');
+      dialog.querySelectorAll('.option-count[data-group="'+CSS.escape(g.id)+'"]').forEach(input=>{
+        const count=selected[g.id][input.dataset.choice]||0;
+        input.max=String(count+remaining);
+        input.disabled=remaining===0&&count===0;
+        const stepper=input.closest('.option-stepper');
+        stepper.querySelector('[data-option-delta="1"]').disabled=remaining===0;
+        stepper.querySelector('[data-option-delta="-1"]').disabled=count===0;
+      });
+    }
+    $('#detail-price').textContent=money(price);
+    $('#add-to-cart').textContent='Add to basket · '+money(price*Number($('#product-quantity').value||1));
+  }
+  function updateChoice(input){
+    const group=p.option_groups.find(g=>g.id===input.dataset.group),choice=input.dataset.choice;
+    if(input.type==='radio')selected[group.id]={[choice]:1};
+    else{
+      // Count the other flavors so typing, pasting and stepping share the same cap.
+      const others=Object.entries(selected[group.id]).reduce((sum,[id,count])=>sum+(id===choice?0:count),0);
+      const value=Number(input.value);
+      const count=Math.min(Math.max(0,group.required_count-others),Math.max(0,Number.isFinite(value)?Math.trunc(value):0));
+      selected[group.id][choice]=count;
+      if(input.value!=='')input.value=String(count);
+    }
+    refresh();
+  }
+  dialog.querySelectorAll('input[data-group]').forEach(input=>{
+    input.oninput=()=>updateChoice(input);
+    if(input.type==='number')input.onblur=()=>{input.value=String(selected[input.dataset.group][input.dataset.choice]||0)};
+  });
+  dialog.querySelectorAll('[data-option-delta]').forEach(button=>button.onclick=()=>{
+    const input=button.closest('.option-stepper').querySelector('input');
+    input.value=String((selected[input.dataset.group][input.dataset.choice]||0)+Number(button.dataset.optionDelta));
+    updateChoice(input);
+  });
+  $('#product-quantity').oninput=refresh;
+  refresh();
   $('#add-to-cart').onclick=()=>{try{const price=selectionPrice(p,selected),quantity=Number($('#product-quantity').value);if(!Number.isInteger(quantity)||quantity<1||quantity>999)throw new Error(`Choose a whole quantity from 1 to 999.`);const same=state.items.find(l=>l.product_id===p.id&&JSON.stringify(l.selections)===JSON.stringify(selected));if(same)same.quantity+=quantity;else state.items.push({product_id:p.id,name:p.name,quantity,selections:selected,unit_price_cents:price});quote=null;persist();renderCart();dialog.close();toast('Added to your basket.')}catch(e){$('#product-error').className='notice danger';$('#product-error').textContent=e.message}};
   dialog.showModal();
 }

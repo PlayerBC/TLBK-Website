@@ -46,3 +46,16 @@
 
 /* Category sections in All treats retain the normal responsive product grid. */
 .shop-category{min-width:0}.shop-category+.shop-category{margin-top:34px;padding-top:26px;border-top:1px solid var(--line)}.shop-category-heading{font-size:20px;line-height:1.4;margin:0 0 16px;color:var(--ink);overflow-wrap:anywhere}@media(max-width:560px){.shop-category-heading{font-size:18px}.shop-category+.shop-category{margin-top:26px;padding-top:22px}}
+
+/* Flavor quantities share the group's limit; selected flavors can still decrease. */
+.option-choice>label{min-width:0;overflow-wrap:anywhere}
+.option-choice-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-shrink:0}
+.option-choice-controls>small{white-space:nowrap}
+.option-stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:7px;background:white}
+.option-stepper button{width:32px;min-height:36px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--brown);font-size:20px;line-height:1}
+.option-stepper button:hover:not(:disabled){background:var(--rose-light)}
+.option-stepper button:disabled{background:#f3eee7;cursor:not-allowed;opacity:.4}
+.option-stepper .option-count{width:36px;min-height:36px;border:0;border-radius:0;padding:4px 0;appearance:textfield;-moz-appearance:textfield}
+.option-stepper .option-count::-webkit-inner-spin-button,.option-stepper .option-count::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.option-stepper .option-count:disabled{background:#f3eee7;color:var(--muted);cursor:not-allowed}
+@media(max-width:380px){.option-choice{gap:8px}.option-choice-controls{flex-direction:column;gap:3px;align-items:flex-end}}
