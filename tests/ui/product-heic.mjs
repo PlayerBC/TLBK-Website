@@ -76,30 +76,42 @@ try {
       canvas.getContext('2d').fillRect(0, 0, 10, 10);
       return canvas.toDataURL('image/jpeg').split(',')[1];
     });
-    await input.setInputFiles([{name:'regular.jpg',mimeType:'image/jpeg',buffer:Buffer.from(jpeg,'base64')},{name:'another.heic',mimeType:'application/octet-stream',buffer:heic}]);
-    await page.waitForFunction(() => document.querySelectorAll('.photo-tile').length === 3);
-    assert.deepEqual(await page.evaluate(() => window.uploaded.map(file => file.type)), ['image/webp','image/jpeg','image/webp']);
+    const png = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 2000; canvas.height = 1000;
+      canvas.getContext('2d').fillRect(0, 0, 1000, 1000);
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    await input.setInputFiles([{name:'regular.jpg',mimeType:'image/jpeg',buffer:Buffer.from(jpeg,'base64')},{name:'transparent.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')},{name:'another.heic',mimeType:'application/octet-stream',buffer:heic}]);
+    await page.waitForFunction(() => document.querySelectorAll('.photo-tile').length === 4);
+    assert.deepEqual(await page.evaluate(() => window.uploaded.map(file => file.type)), ['image/webp','image/webp','image/webp','image/webp']);
+    assert.deepEqual(await page.evaluate(() => window.uploaded.map(file => file.name)), ['iPhone.webp','regular.webp','transparent.webp','another.webp']);
+    assert.equal(await page.evaluate(() => window.uploaded[2].width),1600);
+    assert.equal(await page.evaluate(() => window.uploaded[2].height),800);
     await page.locator('[data-form="product"] button[type="submit"]').click();
     await page.waitForFunction(() => !document.querySelector('#admin-dialog').open);
     await page.locator('[data-action="edit-product"]').first().click();
-    assert.equal(await page.locator('.photo-tile').count(), 3);
+    assert.equal(await page.locator('.photo-tile').count(), 4);
     assert.equal(await page.locator('[name="description"]').inputValue(), 'Preserve this draft');
     const validation = await page.evaluate(async () => {
       const {prepareProductImage} = await import('/assets/ordering/product-image.js');
       const results = [];
-      for (const file of [new File([], 'empty.heic', {type:'image/heic'}), new File([new Uint8Array(25*1024*1024+1)], 'large.heic', {type:'image/heic'}), new File([new Uint8Array(5*1024*1024+1)], 'large.png', {type:'image/png'}),new File(['x'], 'image.svg', {type:'image/svg+xml'})]) {
+      for (const file of [new File([], 'empty.heic', {type:'image/heic'}), new File([new Uint8Array(25*1024*1024+1)], 'large.heic', {type:'image/heic'}), new File([new Uint8Array(25*1024*1024+1)], 'large.png', {type:'image/png'}),new File(['x'], 'image.svg', {type:'image/svg+xml'})]) {
         try { await prepareProductImage(file); results.push('accepted'); } catch (error) { results.push(error.message); }
       }
       for (const type of ['image/jpeg','image/png','image/webp']) {
-        const file = new File(['fixture'], 'regular', {type}); results.push(await prepareProductImage(file) === file);
+        const canvas=document.createElement('canvas');canvas.width=32;canvas.height=20;
+        canvas.getContext('2d').fillRect(0,0,16,20);
+        const blob=await new Promise(resolve=>canvas.toBlob(resolve,type));
+        const converted=await prepareProductImage(new File([blob], 'regular', {type}));
+        results.push(converted.type);
       }
       return results;
     });
     assert.match(validation[0], /Choose a photo/);
     assert.match(validation[1], /25 MB/);
-    assert.match(validation[2], /5 MB/);
+    assert.match(validation[2], /25 MB/);
     assert.match(validation[3], /Use a JPEG/);
-    assert.deepEqual(validation.slice(4), [true,true,true]);
+    assert.deepEqual(validation.slice(4), ['image/webp','image/webp','image/webp']);
     checks.push(`${mobile ? 'Mobile' : 'Desktop'}: real HEIC/HEIF conversion, output signature/dimensions/size, upload lock, failed conversion recovery, mixed uploads, save/reopen, draft preservation, empty/oversized/unsupported input`);
     await context.close();
   }
