@@ -170,12 +170,13 @@ function renderLanding() {
   };
 }
 
-function normalShop() {
-  return document.body.hasAttribute('data-newsletter-shop') && new URLSearchParams(location.search).get('demo') !== '1' && !new URLSearchParams(location.hash.slice(1)).has('order');
+function popupPage() {
+  return (document.body.hasAttribute('data-newsletter-home') || document.body.hasAttribute('data-newsletter-shop')) && new URLSearchParams(location.search).get('demo') !== '1' && !new URLSearchParams(location.hash.slice(1)).has('order');
 }
 
-async function setupShopPopup() {
-  if (!normalShop()) return;
+async function setupNewsletterPopup() {
+  if (!popupPage()) return;
+  const source = document.body.hasAttribute('data-newsletter-home') ? 'homepage' : 'shop_popup';
   let user = null, granted = false, finished = false, checking = false;
   let dialog;
   // The five-second pause starts on page entry, not after a network request.
@@ -189,11 +190,11 @@ async function setupShopPopup() {
       if (['subscribed', 'pending'].includes(preference.status) || preference.popup_seen) return;
     } else if (seenHere() || subscribedHere()) return;
   } catch { return; /* Avoid prompting a subscriber while their status is unknown. */ }
-  const blocked = () => document.hidden || !normalShop() || Boolean(document.querySelector('dialog[open]')) || Boolean(document.querySelector('#app .loading'));
+  const blocked = () => document.hidden || !popupPage() || Boolean(document.querySelector('dialog[open]')) || Boolean(document.querySelector('#app .loading'));
   const cleanUp = () => { finished = true; clearTimeout(timer); observer.disconnect(); document.removeEventListener('visibilitychange', check); window.removeEventListener('hashchange', check); };
   const check = async () => {
     if (finished || checking) return;
-    if (!normalShop() || seenHere()) { cleanUp(); return; }
+    if (!popupPage() || seenHere()) { cleanUp(); return; }
     if (Date.now() < earliest || blocked()) return;
     checking = true;
     try {
@@ -214,12 +215,12 @@ async function setupShopPopup() {
         if (!result.show) { cleanUp(); return; }
         granted = true;
       }
-      if (finished || !normalShop() || blocked() || seenHere()) return;
+      if (finished || !popupPage() || blocked() || seenHere()) return;
       dialog = document.createElement('dialog');
       dialog.className = 'newsletter-dialog'; dialog.id = 'newsletter-dialog';
       dialog.setAttribute('aria-labelledby', 'newsletter-popup-title');
       dialog.setAttribute('aria-describedby', 'newsletter-popup-copy');
-      dialog.innerHTML = `<button class="newsletter-close" type="button" aria-label="Close newsletter invitation">×</button><img class="newsletter-mark" src="assets/img/brands/Hat.png" alt=""><p class="newsletter-eyebrow">The TLB Newsletter</p><h2 class="newsletter-title" id="newsletter-popup-title">Get <strong>5% OFF</strong> your next order</h2><p class="newsletter-copy" id="newsletter-popup-copy">New subscribers get a welcome code by email. Stay tuned for more offers exclusively for newsletter subscribers.</p>${formMarkup('shop_popup', 'newsletter-popup', user?.email || '')}<button class="newsletter-button newsletter-button-secondary" type="button" data-newsletter-dismiss>Maybe later</button>`;
+      dialog.innerHTML = `<button class="newsletter-close" type="button" aria-label="Close newsletter invitation">×</button><img class="newsletter-mark" src="assets/img/brands/Hat.png" alt=""><p class="newsletter-eyebrow">The TLB Newsletter</p><h2 class="newsletter-title" id="newsletter-popup-title">Get <strong>5% OFF</strong> your next order</h2><p class="newsletter-copy" id="newsletter-popup-copy">New subscribers get a welcome code by email. Stay tuned for more offers exclusively for newsletter subscribers.</p>${formMarkup(source, 'newsletter-popup', user?.email || '')}<button class="newsletter-button newsletter-button-secondary" type="button" data-newsletter-dismiss>Maybe later</button>`;
       document.body.append(dialog);
       mountNewsletterForms(dialog);
       dialog.querySelector('.newsletter-close').onclick = () => dialog.close();
@@ -227,7 +228,7 @@ async function setupShopPopup() {
       dialog.addEventListener('click', event => { if (event.target === dialog) { const box = dialog.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close(); } });
       dialog.addEventListener('close', () => dialog.remove(), { once: true });
       const showOnce = () => {
-        if (seenHere() || !normalShop() || blocked() || !markShown(!user)) return false;
+        if (seenHere() || !popupPage() || blocked() || !markShown(!user)) return false;
         dialog.showModal();
         return true;
       };
@@ -241,9 +242,9 @@ async function setupShopPopup() {
       if (!shown) { dialog.remove(); return; }
       // Another modal may be opened by the app after ours appeared. Close our
       // invitation immediately so it can never cover checkout or product UI.
-      const overlap = new MutationObserver(() => { if ([...document.querySelectorAll('dialog[open]')].some(node => node !== dialog) || !normalShop()) dialog.close(); });
+      const overlap = new MutationObserver(() => { if ([...document.querySelectorAll('dialog[open]')].some(node => node !== dialog) || !popupPage()) dialog.close(); });
       overlap.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
-      const onHash = () => { if (!normalShop()) dialog.close(); };
+      const onHash = () => { if (!popupPage()) dialog.close(); };
       window.addEventListener('hashchange', onHash);
       dialog.addEventListener('close', () => { overlap.disconnect(); window.removeEventListener('hashchange', onHash); }, { once: true });
     } catch { cleanUp(); } finally { checking = false; }
@@ -258,5 +259,5 @@ async function setupShopPopup() {
 mountNewsletterForms();
 renderLanding();
 if (landing) window.addEventListener('hashchange', () => { captureLink(); renderLanding(); });
-setupShopPopup();
+setupNewsletterPopup();
 

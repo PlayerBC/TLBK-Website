@@ -92,6 +92,43 @@ try {
   assert.equal(await f.page.locator('#newsletter-dialog').count(),0);
   await f.page.reload(); await advance(f.page);
   assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'No repeat after reload');
+  await f.page.goto(origin+'/index.html'); await advance(f.page);
+  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Shop-first visitors do not see it again on Home');
+  await f.context.close();
+
+  f = await fixture();
+  await f.page.goto(origin+'/index.html'); await advance(f.page);
+  await f.page.locator('#newsletter-dialog').waitFor({state:'visible'});
+  assert.equal(await f.page.locator('#newsletter-popup-title strong').textContent(),'5% OFF');
+  const popupBounds=await f.page.locator('#newsletter-dialog').boundingBox();
+  assert(popupBounds.x>=0 && popupBounds.x+popupBounds.width<=390,'Homepage popup fits mobile width');
+  await f.page.screenshot({path:join(root,'work/newsletter-home-popup-mobile.png')});
+  await f.page.getByRole('button',{name:'Maybe later',exact:true}).click();
+  await f.page.goto(origin+'/shop.html'); await advance(f.page);
+  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Home-first visitors do not see it again in Shop');
+  await f.page.goto(origin+'/index.html'); await advance(f.page);
+  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Returning Home does not reset the shared seen flag');
+  await f.context.close();
+
+  f = await fixture();
+  await f.page.goto(origin+'/index.html');
+  await f.page.waitForFunction(()=>window.authReads>0);
+  await f.page.clock.fastForward(1000);
+  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Popup waits five seconds');
+  await f.page.goto(origin+'/shop.html'); await advance(f.page);
+  await f.page.locator('#newsletter-dialog').waitFor({state:'visible'});
+  assert.equal(await f.page.locator('#newsletter-popup-title strong').textContent(),'5% OFF','Navigating before Home showed it still allows a Shop invitation');
+  await f.context.close();
+
+  f = await fixture();
+  await f.page.goto(origin+'/index.html'); await advance(f.page);
+  await f.page.locator('#newsletter-dialog').waitFor({state:'visible'});
+  await f.page.locator('#newsletter-popup-email').fill('home-popup@example.test');
+  await f.page.locator('#newsletter-dialog button[type=submit]').click();
+  await f.page.getByRole('heading',{name:'You’re in!',exact:true}).waitFor();
+  assert.deepEqual(f.state.calls.find(call=>call.action==='subscribe'),{action:'subscribe',email:'home-popup@example.test',source:'homepage',website:''});
+  await f.page.goto(origin+'/shop.html'); await advance(f.page);
+  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Homepage popup signup suppresses the Shop invitation');
   await f.context.close();
 
   f = await fixture();
@@ -135,10 +172,10 @@ try {
 
   f = await fixture();
   const otherTab = await f.context.newPage(); await otherTab.clock.install();
-  await Promise.all([f.page.goto(origin+'/shop.html'),otherTab.goto(origin+'/shop.html')]);
+  await Promise.all([f.page.goto(origin+'/index.html'),otherTab.goto(origin+'/shop.html')]);
   await Promise.all([advance(f.page),advance(otherTab)]);
   await new Promise(resolveWait => setTimeout(resolveWait,100));
-  assert.equal(await f.page.locator('#newsletter-dialog[open]').count() + await otherTab.locator('#newsletter-dialog[open]').count(),1,'Concurrent guest tabs share one permanent invitation');
+  assert.equal(await f.page.locator('#newsletter-dialog[open]').count() + await otherTab.locator('#newsletter-dialog[open]').count(),1,'Concurrent Home and Shop tabs share one permanent invitation');
   await f.context.close();
 
   f = await fixture(); await f.page.goto(origin+'/index.html');
@@ -149,13 +186,15 @@ try {
 
   const member = {id:'once-ever-account',email:'member@example.test',email_confirmed_at:'2026-01-01'};
   for (let device = 0; device < 2; device++) {
-    f = await fixture({user:member}); await f.page.goto(origin + '/shop.html'); await advance(f.page);
+    f = await fixture({user:member}); await f.page.goto(origin + (device ? '/shop.html' : '/index.html')); await advance(f.page);
     if (!device) await f.page.locator('#newsletter-dialog').waitFor({state:'visible'});
     else { await f.page.waitForFunction(() => window.authReads >= 2); await new Promise(resolveWait => setTimeout(resolveWait,80)); assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Server claim prevents another device showing it'); }
     await f.context.close();
   }
   f = await fixture({user:member,initial:'subscribed'}); await f.page.goto(origin+'/shop.html'); await advance(f.page);
-  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Subscribers never see the invitation'); await f.context.close();
+  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Subscribers never see the invitation');
+  await f.page.goto(origin+'/index.html'); await advance(f.page);
+  assert.equal(await f.page.locator('#newsletter-dialog').count(),0,'Recognized subscribers are also skipped on Home'); await f.context.close();
   for (const path of ['/shop.html?demo=1','/shop.html#order=test']) {
     f = await fixture(); await f.page.goto(origin+path); await f.page.clock.fastForward(6000);
     assert.equal(await f.page.locator('#newsletter-dialog').count(),0); assert.equal(f.state.calls.length,0); await f.context.close();
