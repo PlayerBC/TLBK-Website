@@ -181,7 +181,7 @@ export async function academyApi(action, payload = {}) {
 export async function academyPortalApi(action, payload = {}) {
   const client = await connection();
   const { data, error } = await client.rpc('academy_portal_api', { p_action: action, p_payload: payload });
-  if (error) throw new Error(error.message || 'Academy could not complete this request.');
+  if (error) throw Object.assign(new Error(error.message || 'Academy could not complete this request.'), { code: error.code });
   return data;
 }
 export const academyBackupConnection=(action,payload={})=>edge('academy-backup',{action,...payload});

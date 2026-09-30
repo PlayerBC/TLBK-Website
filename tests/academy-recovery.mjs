@@ -7,6 +7,7 @@ import {buildAcademyArchive} from '../supabase/functions/academy-backup/archive.
 const require=createRequire((process.env.PLAYWRIGHT_PACKAGE_ROOT||process.cwd()+'/node_modules')+'/package.json'),JSZip=require('jszip');
 const {db,h,api,service,cookie,upload}=await setup();let fresh;
 try{
+ const independentInstructor=randomUUID();await db.query("insert into auth.users(id,email,email_confirmed_at) values($1,'independent-instructor@example.test',now())",[independentInstructor]);await api(h.ids.owner,'save_instructor',{id:independentInstructor,display_name:'Independent Instructor'});
  const source=randomUUID(),version=randomUUID(),childId=randomUUID(),childVersion=randomUUID(),variantId=randomUUID();
  await db.query("insert into tlb.recipes(id,code,name) values($1,'QA-IMPORT','Main'),($2,'QA-COMPONENT','Filling')",[source,childId]);
  const component={name:'Filling',private_notes:'PRIVATE-FILLING',variants:[{id:variantId,name:'Filling formula',yield:{quantity:'100',unit:'g'},groups:[{name:'Filling',ingredients:[{name:'Sugar',quantity:'50',unit:'g',price:'PRIVATE-PRICE'}]}],methods:[],equipment:[],baking:[]}]};
@@ -22,6 +23,7 @@ try{
  const buffer=Buffer.concat(parts),zip=await JSZip.loadAsync(buffer),manifest=JSON.parse(await zip.file('manifest.json').async('string'));
  assert.equal(manifest.format,'tlb-academy-backup');assert.equal(manifest.files_included,false);
  const tables={};for(const entry of manifest.entries){const bytes=await zip.file(entry.path).async('nodebuffer');assert.equal(bytes.length,entry.size_bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),entry.sha256);if(entry.path.startsWith('Database Exports/'))tables[entry.path.split('/')[1].replace('.json','')]=JSON.parse(bytes);}
+ assert.ok(tables.actors.some(a=>a.id===independentInstructor&&!a.role));
  assert.equal(Object.keys(zip.files).length,manifest.entries.length+1);assert.equal(Object.values(tables).reduce((n,rows)=>n+rows.length,0),manifest.record_count);assert.ok(!JSON.stringify(tables).includes('unsubscribe_token'));assert.ok(!JSON.stringify(tables).includes('PRIVATE'));
  fresh=(await setup({fixtures:false})).db;
  for(const actor of tables.actors){await fresh.query('insert into auth.users(id,email) values($1,$2)',[actor.id,actor.email]);if(actor.role)await fresh.query('insert into tlb.staff(user_id,role) values($1,$2)',[actor.id,actor.role]);}
@@ -29,6 +31,7 @@ try{
  // rehearsal reconciles actors and clears optional external provenance links.
  const order=['academy_instructors','academy_curricula','academy_modules','academy_enrollments','academy_student_recipes','academy_student_recipe_versions','academy_class_recipes','academy_announcements','academy_announcement_reads','academy_upcoming_classes','academy_submissions','academy_message_threads','academy_messages','academy_message_reads','academy_portal_media','academy_newsletter_preferences','academy_audit','academy_broadcasts'];
  for(const table of order){for(const sourceRow of tables[table]){const row={...sourceRow};if(table==='academy_curricula')row.public_class_id=null;if(table==='academy_student_recipes')row.source_version_id=null;const cols=Object.keys(row);await fresh.query(`insert into tlb.${table}(${cols.join(',')}) overriding system value select ${cols.join(',')} from jsonb_populate_record(null::tlb.${table},$1::jsonb)`,[JSON.stringify(row)]);}assert.equal(Number((await fresh.query(`select count(*) n from tlb.${table}`)).rows[0].n),tables[table].length);}
+ assert.equal(Number((await fresh.query('select count(*) n from tlb.academy_instructors where user_id=$1',[independentInstructor])).rows[0].n),1);assert.equal(Number((await fresh.query('select count(*) n from tlb.staff where user_id=$1',[independentInstructor])).rows[0].n),0);
  await fresh.exec("select setval(pg_get_serial_sequence('tlb.academy_audit','id'),greatest(1,(select coalesce(max(id),1) from tlb.academy_audit)));");
  await fresh.exec('set role authenticated');await fresh.query("select set_config('request.jwt.claim.sub',$1,false)",[h.ids.customer]);const restored=(await fresh.query("select public.academy_portal_api('recipe',$1::jsonb) r",[JSON.stringify({id:r.id,class_id:cookie.id})])).rows[0].r;assert.equal(restored.document.variants[1].groups[0].ingredients[0].name,'Sugar');await assert.rejects(fresh.query('select * from tlb.academy_enrollments'));await fresh.exec('reset role');
  await service('academy_backup_service',['finish',{job_id:start.job_id,lease_token:start.lease_token,sha256:createHash('sha256').update(buffer).digest('hex'),size_bytes:buffer.length}]);
