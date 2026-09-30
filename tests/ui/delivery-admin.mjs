@@ -163,9 +163,21 @@ try {
     await calendar('blocked_dates').screenshot({ path: join(process.env.UI_SCREENSHOT_DIR, 'calendar-mobile.png') });
   }
 
+  // Simulate a delayed render frame: starting to type must take priority over
+  // the dialog's initial focus callback, even on a busy device.
+  await page.evaluate(() => {
+    window.__originalRaf = window.requestAnimationFrame;
+    window.__dialogFrames = [];
+    window.requestAnimationFrame = callback => { window.__dialogFrames.push(callback); return window.__dialogFrames.length; };
+  });
   await page.locator('[data-action="edit-zone"][data-id="qc"]').click();
   assert.equal(await page.locator('[name="description"]').getAttribute('maxlength'), '2000');
   await page.locator('[name="description"]').fill(description);
+  await page.evaluate(() => {
+    window.requestAnimationFrame = window.__originalRaf;
+    for (const callback of window.__dialogFrames) callback(performance.now());
+  });
+  assert.equal(await page.locator('[name="description"]').evaluate(node => document.activeElement === node), true, 'A delayed dialog focus callback must not interrupt the field being edited');
   await page.locator('[data-form="zone"] button[type="submit"]').click();
   await page.locator('#admin-dialog').waitFor({ state: 'hidden' });
   assert.equal((await saved()).zones[0].description, description);

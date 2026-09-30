@@ -39,7 +39,7 @@ try {
   if (!process.argv.includes('--migrations-only')) {
     // Historical upgrade fixtures deliberately restore older functions. Run
     // voucher contracts in a fresh database with the installed schema intact.
-    const suites = process.argv.includes('--vouchers')
+    const suites = process.argv.includes('--recipe-backups') ? ['recipes-backup.mjs'] : process.argv.includes('--recipes') ? ['recipes.mjs'] : process.argv.includes('--vouchers')
       ? ['02-order-contract.test.mjs', 'vouchers.mjs']
       : process.argv.includes('--operations') ? ['02-order-contract.test.mjs','operation-alerts.mjs']
       : (await readdir(here)).filter(name => name.endsWith('.test.mjs')).sort();

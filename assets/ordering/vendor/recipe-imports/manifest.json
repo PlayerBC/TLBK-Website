@@ -1,0 +1,26 @@
+[
+  {
+    "name": "pdfjs-dist",
+    "version": "6.3.289",
+    "bytes": 8503425,
+    "integrity": "sha512-ZHjSVpDa3D6izMq8/04lvkhkATUmL9px6ChPaXc1k6nU2Mrhlg1/7F0bdUqCwUjw3NsPTfPZsMDUU6ZIcRaeQw=="
+  },
+  {
+    "name": "mammoth",
+    "version": "1.13.0",
+    "bytes": 438003,
+    "integrity": "sha512-2cawcYFcP7ISfXbBcL9lmVgTNWo88v/52ND1gnywHtVT/pX0//puPnf0iMPV9ZgmuvNOE+zkIhDgZ9M2c2dDDg=="
+  },
+  {
+    "name": "tesseract.js",
+    "version": "7.0.0",
+    "bytes": 616435,
+    "integrity": "sha512-exPBkd+z+wM1BuMkx/Bjv43OeLBxhL5kKWsz/9JY+DXcXdiBjiAch0V49QR3oAJqCaL5qURE0vx9Eo+G5YE7mA=="
+  },
+  {
+    "name": "tesseract.js-core",
+    "version": "6.1.2",
+    "bytes": 11339835,
+    "integrity": "sha512-pv4GjmramjdObhDyR1q85Td8X60Puu/lGQn7Kw2id05LLgHhAcWgnz6xSdMCSxBMWjQDmMyDXPTC2aqADdpiow=="
+  }
+]

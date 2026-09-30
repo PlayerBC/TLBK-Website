@@ -155,6 +155,8 @@ function showDialog(title, content, { preserveScroll = false, focusSelector } = 
     if (!modal.open || $('#dialog-body').firstElementChild !== renderedBody) return;
     modal.scrollTop = scrollTop;
     const target = focusSelector ? $(focusSelector, $('#dialog-body')) : preserveScroll ? null : $('input:not([type=hidden]), select, textarea, button', $('#dialog-body'));
+    // A slow render frame must not steal focus once someone starts editing.
+    if (renderedBody.contains(document.activeElement) && document.activeElement !== target) return;
     target?.focus({ preventScroll: true });
     if (preserveScroll && target) target.scrollIntoView({ block: 'nearest' });
   });
@@ -176,6 +178,11 @@ async function refresh() {
   if (!configured) return;
   const result = await api('admin_bootstrap');
   Object.assign(state, result, { connected: true, analyticsUpdatedAt: new Date().toISOString() });
+  const recipeLink=$('[data-recipe-link]');if(recipeLink){
+    recipeLink.hidden=true;
+    if(state.role==='owner')recipeLink.hidden=false;
+    else import('./client.js').then(async({recipeApi})=>{if(typeof recipeApi!=='function')return;const access=await recipeApi('bootstrap');if(!state.connected)return;recipeLink.hidden=false;recipeLink.href=access.role==='kitchen'?'recipes.html?view=kitchen':'recipes.html';}).catch(()=>{});
+  }
   const welcomeIds = new Set((state.newsletter_promos || []).map(promo => promo.id));
   state.promos = state.promos.filter(promo => !welcomeIds.has(promo.id));
   state.products = orderedCatalogProducts(state.products, state.categories);

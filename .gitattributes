@@ -1,0 +1,3 @@
+assets/ordering/vendor/recipe-imports/** linguist-vendored
+assets/ordering/vendor/noble-hashes-2.4.0/** linguist-vendored
+assets/ordering/vendor/hash-wasm-4.12.0/** linguist-vendored

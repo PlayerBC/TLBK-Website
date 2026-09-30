@@ -24,7 +24,7 @@ function safeNext(value) {
   if (!value || /[\u0000-\u001f\\]/.test(value)) return 'shop.html';
   try {
     const target = new URL(value, new URL('./', location.href));
-    const allowed = ['shop.html', 'account.html', 'manage.html'].map(path => new URL(path, new URL('./', location.href)).pathname);
+    const allowed = ['shop.html', 'account.html', 'manage.html', 'recipes.html'].map(path => new URL(path, new URL('./', location.href)).pathname);
     if (target.origin !== location.origin || !allowed.includes(target.pathname)) return 'shop.html';
     return `${target.pathname}${target.search}${target.hash}`;
   } catch { return 'shop.html'; }
@@ -34,8 +34,8 @@ let rememberedNext;
 try { rememberedNext = sessionStorage.getItem('tlb-auth-return-v1'); } catch { /* Storage may be restricted in private browser contexts. */ }
 const next = safeNext(params.get('next') || rememberedNext);
 try { if (params.has('next')) sessionStorage.setItem('tlb-auth-return-v1', next); } catch { /* The explicit next query still works without storage. */ }
-const guestNext = new URL(next, location.href).pathname.endsWith('/manage.html') ? 'shop.html' : next;
-const returnLabel = new URL(next, location.href).pathname.endsWith('/manage.html') ? 'Continue to staff dashboard' : 'Continue to your order';
+const guestNext = /\/(manage|recipes)\.html$/.test(new URL(next, location.href).pathname) ? 'shop.html' : next;
+const returnLabel = new URL(next, location.href).pathname.endsWith('/recipes.html') ? 'Continue to recipe library' : new URL(next, location.href).pathname.endsWith('/manage.html') ? 'Continue to staff dashboard' : 'Continue to your order';
 const redirect = (path) => new URL(path, location.href).href;
 const statusText = value => String(value || '').replace(/_/g, ' ').replace(/^./, value => value.toUpperCase());
 
@@ -257,7 +257,13 @@ async function renderAccount() {
   await Promise.allSettled([
     loadHistory(version),
     mountNewsletterPreferences(preferences, user.email, {onChange:()=>voucherController?.refresh()}),
-    api('admin_bootstrap').then(() => { if (version === renderVersion) document.getElementById('staff-link')?.removeAttribute('hidden'); }),
+    api('admin_bootstrap').then(async() => {
+      if (version !== renderVersion) return;
+      document.getElementById('staff-link')?.removeAttribute('hidden');
+      const {recipeApi}=await import('./client.js');if(typeof recipeApi!=='function')return;
+      const access=await recipeApi('bootstrap');if(version!==renderVersion)return;
+      const link=document.createElement('a');link.className='button button-quiet';link.href=access.role==='kitchen'?'recipes.html?view=kitchen':'recipes.html';link.textContent=access.role==='kitchen'?'Kitchen recipes':'Recipe library';document.getElementById('staff-link')?.before(link);
+    }),
   ]);
 }
 

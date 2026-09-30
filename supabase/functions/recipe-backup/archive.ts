@@ -1,0 +1,41 @@
+import {credentials} from '../_shared/server.ts';
+import {recipeZip,nativeDigest} from '../../../assets/ordering/recipe-archive.js';
+import {RecipeBackupError} from './google.ts';
+const utf8=new TextEncoder(),esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+export async function readRecipeFile(file:any,signal:AbortSignal){
+ if(!/^[0-9a-f-]{36}\/[0-9a-f-]{36}$/i.test(file.path)||file.path.split('/')[1]!==file.id)throw new RecipeBackupError('file_missing');
+ const {url,key}=credentials(),response=await fetch(`${url}/storage/v1/object/authenticated/recipe-files/${file.path}`,{headers:{apikey:key,Authorization:`Bearer ${key}`},redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});
+ if(!response.ok||!response.body)throw new RecipeBackupError('file_missing');
+ const reader=response.body.getReader(),parts:Uint8Array[]=[];let length=0;
+ while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>26214400){await reader.cancel();throw new RecipeBackupError('too_large');}parts.push(value);}
+ if(length!==file.size_bytes)throw new RecipeBackupError('checksum');
+ const bytes=new Uint8Array(length);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}
+ if(!file.sha256||await nativeDigest(bytes)!==file.sha256)throw new RecipeBackupError('checksum');return bytes;
+}
+function humanRecipe(version:any){const d=version.document;
+ return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="referrer" content="no-referrer"><title>${esc(d.name)}</title><style>body{font:16px/1.6 sans-serif;max-width:850px;margin:40px auto;padding:20px;color:#38271c}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #ddd;text-align:left}h2{margin-top:30px}small{color:#765b43}@media print{h2{break-after:avoid}tr,li{break-inside:avoid}}</style><h1>${esc(d.name)}</h1><small>Version ${version.number} · ${esc(version.status)} · ${esc(version.created_at)}</small><p>${esc(d.description)}</p><p>${esc(d.critical_notes)}</p>${d.variants.map((v:any)=>`<h2>${esc(v.name)}</h2><p>Yield: ${esc(v.yield.quantity)} ${esc(v.yield.unit)} · ${esc(v.yield.pan_size)}</p>${v.groups.map((g:any)=>`<h3>${esc(g.name)}</h3><table><tr><th>Ingredient</th><th>Quantity</th><th>Notes</th></tr>${g.ingredients.map((r:any)=>`<tr><td>${esc(r.name)}</td><td>${esc(r.quantity)} ${esc(r.unit)}</td><td>${esc(r.notes)}</td></tr>`).join('')}</table>`).join('')}${(v.methods||[]).map((m:any)=>`<h3>${esc(m.name)}</h3><ol>${m.steps.map((s:any)=>`<li>${esc(s.instruction)}${s.temperature?` · ${esc(s.temperature)}`:''}${s.timer_minutes?` · ${esc(s.timer_minutes)} min`:''}${s.warning?`<p>${esc(s.warning)}</p>`:''}</li>`).join('')}</ol>`).join('')}<h3>Baking settings</h3>${(v.baking||[]).map((s:any)=>`<p><strong>${esc(s.name)}</strong> · top ${esc(s.top)}°C · bottom ${esc(s.bottom)}°C · ${esc(s.minutes)} min · ${esc(s.notes)}</p>`).join('')}<p>${esc(v.production_notes)}</p><h3>Packaging & special equipment</h3><p>${esc(v.packaging?.description)} · ${esc(v.packaging?.dimensions)} · ${esc(v.packaging?.notes)}</p>${(v.equipment||[]).map((e:any)=>`<p>${esc(e.name)} · ${esc(e.notes)}</p>`).join('')}`).join('')}<p>Photo files and exact recovery records are included in this archive. Use manifest.json to match file IDs to recipes.</p></html>`;
+}
+export function buildRecipeArchive(start:any,dispatch:any,read=readRecipeFile,signal=AbortSignal.timeout(340000)){
+ const manifest:any={format:'tlb-recipe-backup',version:1,schema_version:1,generated_at:start.generated_at,job_id:start.job_id,timezone:'Asia/Manila',tables:start.tables,entries:[],files:[],record_count:start.record_count,
+  exclusions:['Login credentials, service keys, worker tokens and unrelated shop/customer records.','Files still marked as unfinished uploads.'],restore:'See README.txt and the versioned recovery script.'};
+ const context={job_id:start.job_id,lease_token:start.lease_token};let entries=0;
+ async function* rows(table:string){let after=0;while(true){if(signal.aborted)throw new RecipeBackupError('network');const page=await dispatch('page',{...context,table,after,limit:10});if(!page.rows.length)break;for(const r of page.rows){after=r.sequence;yield r.data;}}}
+ async function* tableJson(table:string){yield utf8.encode('[');let first=true;for await(const data of rows(table)){yield utf8.encode((first?'':',')+JSON.stringify(data));first=false;}yield utf8.encode(']');}
+ async function* files(){
+  yield {path:'README.txt',bytes:`TLB Kitchen recipe and costing recovery archive\nGenerated: ${start.generated_at}\n\nDatabase Exports/: authoritative JSON rows with original IDs and relationships.\nFiles/: exact uploaded photos, source documents and references, identified by file ID.\nRecipes/: human-readable approved and production formulas; historical versions are retained.\nmanifest.json: SHA-256 checksums and file-to-database mapping.\n\nRECOVERY\n1. Verify every manifest checksum before restoring anything.\n2. Use a new isolated database with the matching recipe schema. Never test on production.\n3. Reconcile the actors file against your Auth users. Passwords and Auth sessions are not backed up.\n4. Restore categories/resources/recipes/versions and dependent records with deferred recipe-pointer constraints.\n5. Upload Files/ bytes to the private recipe-files bucket using their original source_path, then verify checksums.\n6. Compare counts, versions, price snapshots, component links, R&D logs and photo references before switching systems.\n\nThe repository's scripts/restore-recipe-backup.mjs performs validation and the local restore rehearsal.\nDaily history: 30 copies. Monthly history: 12 copies. Two manual copies.\nA deletion from the live library does not remove an existing historical archive.\nKeep this archive private. It contains proprietary formulas, costs and supplier information.\n`};
+  for(const table of start.tables)yield {path:`Database Exports/${table}.json`,stream:tableJson(table)};
+  for await(const version of rows('recipe_versions'))if(['approved','production'].includes(version.status)){
+   const name=String(version.document.name).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,70);
+   yield {path:`Recipes/${name}-${version.recipe_id}-v${version.number}.html`,bytes:humanRecipe(version)};
+  }
+  for await(const file of rows('recipe_files'))if(file.uploaded){
+   const name=String(file.filename).replace(/[^A-Za-z0-9._-]/g,'_').slice(0,120)||'attachment';
+   const path=`Files/${file.id}/${name}`,bytes=await read(file,signal);
+   manifest.files.push({id:file.id,source_path:file.path,archive_path:path,filename:file.filename,mime_type:file.mime_type,size_bytes:bytes.length,sha256:file.sha256});
+   yield {path,bytes};
+  }
+  if(manifest.files.length!==start.file_count)throw new RecipeBackupError('file_missing');
+  yield {path:'manifest.json',bytes:JSON.stringify(manifest,null,2)};
+ }
+ return recipeZip(files(),{timestamp:new Date(start.generated_at),onEntry:async(entry:any)=>{if(entry.path!=='manifest.json')manifest.entries.push(entry);entries++;if(entries%10===0)await dispatch('progress',{...context,entries});}});
+}

@@ -26,7 +26,8 @@ env.ACADEMY_PREVIEW_DIR=previewDir;env.PORT=String(port);
 let tracked;
 try{tracked=execFileSync('git',['ls-files','tests/ui/*.mjs'],{cwd:root,encoding:'utf8'}).trim().split(/\r?\n/).filter(Boolean);}catch{tracked=(await readdir(join(root,'tests/ui'))).filter(f=>f.endsWith('.mjs')).map(f=>'tests/ui/'+f);}
 const ui=tracked.filter(f=>f!=='tests/ui/academy.mjs').sort();
-const jobs=[['tests/ui/academy.mjs'],['scripts/test-unit.mjs'],['tests/backend/run.mjs'],['tests/backend/run.mjs','--vouchers'],['tests/backend/run.mjs','--operations'],['tests/edge/run.mjs'],...ui.map(f=>[f]),['tests/newsletter-ui.mjs']];
+const recipeUI=['tests/ui/recipes.mjs','tests/ui/recipe-import-export.mjs'].filter(f=>!ui.includes(f));
+const jobs=[['tests/ui/academy.mjs'],['scripts/test-unit.mjs'],['tests/backend/run.mjs'],['tests/backend/run.mjs','--vouchers'],['tests/backend/run.mjs','--operations'],['tests/backend/run.mjs','--recipes'],['--experimental-transform-types','tests/backend/run.mjs','--recipe-backups'],['tests/edge/run.mjs'],...ui.map(f=>[f]),...recipeUI.map(f=>[f]),['tests/newsletter-ui.mjs']];
 const children=new Set(),rows=[];let interrupted=false,previewLog='',preview;
 function kill(child){
  if(child.exitCode!==null||child.signalCode!==null)return;

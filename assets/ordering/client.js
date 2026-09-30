@@ -115,6 +115,41 @@ export async function orderBackupApi(action,payload={}) {
   if(error)throw new Error(error.message || 'Order backups could not be loaded.');
   return data;
 }
+
+export async function recipeApi(action,payload={}) {
+  const client=await connection();
+  const {data,error}=await client.rpc('recipe_api',{p_action:action,p_payload:payload});
+  if(error)throw new Error(error.message || 'The recipe request could not be completed.');
+  return data;
+}
+export async function uploadRecipeFile(file) {
+  if(!file?.size || file.size>25*1024*1024)throw Error('Choose a file up to 25 MB.');
+  const bytes=await file.arrayBuffer();
+  const sha256=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const record=await recipeApi('reserve_file',{filename:file.name,mime_type:file.type,size_bytes:file.size,sha256});
+  const client=await connection();
+  const {error}=await client.storage.from('recipe-files').upload(record.path,file,{contentType:file.type,upsert:false});
+  if(error)throw new Error(error.message || 'The recipe file could not be uploaded.');
+  await recipeApi('confirm_file',{id:record.id});return record;
+}
+export async function recipeFileUrl(path) {
+  const client=await connection();
+  const {data,error}=await client.storage.from('recipe-files').createSignedUrl(path,900);
+  if(error)throw new Error(error.message || 'The recipe file could not be opened.');
+  return data.signedUrl;
+}
+export const recipeBackupConnection=(action,payload={})=>edge('recipe-backup',{action,...payload});
+export async function recipeBackupApi(action,payload={}) {
+  const client=await connection();const {data,error}=await client.rpc('recipe_backup_api',{p_action:action,p_payload:payload});
+  if(error)throw new Error(error.message||'Recipe backup status could not be loaded.');return data;
+}
+export async function recipeBackupDownload(){
+  const client=await connection(),{data,error}=await client.auth.getSession();
+  if(error||!data.session?.access_token)throw Error('Sign in as the owner to download a recipe backup.');
+  const response=await fetch(`${config.supabaseUrl.replace(/\/$/,'')}/functions/v1/recipe-backup`,{method:'POST',headers:{apikey:config.supabasePublishableKey,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},body:JSON.stringify({action:'download'}),signal:AbortSignal.timeout(400000)});
+  if(!response.ok){const result=await response.json().catch(()=>null);throw Error(result?.error||'The recipe archive could not be created.');}
+  if(!response.headers.get('content-type')?.startsWith('application/zip'))throw Error('The backup service did not return an archive.');return response.blob();
+}
 export const orderBackupConnection=(action,payload={})=>edge('order-backup',{action,...payload});
 export async function orderBackupDownload(scope='paid_active') {
   const client=await connection();const {data,error}=await client.auth.getSession();
