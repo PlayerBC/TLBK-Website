@@ -31,7 +31,7 @@ export async function auditHarness(channel=process.env.PLAYWRIGHT_CHANNEL||'chro
    if(!files.has(m.path))await db.query("insert into storage.objects(bucket_id,name,metadata) values('academy-student-media',$1,$2::jsonb)",[m.path,JSON.stringify({size:data.length,mimetype:'image/webp'})]);
    files.set(m.path,Buffer.from(data));return service('academy_portal_confirm_upload',[id,actor,'a'.repeat(64)]);
   }));
-  await context.exposeFunction('auditMedia',path=>serial(async()=>{if(!(await state.storage(actor,path)).length)throw Error('Private media denied');return [...(files.get(path)||Buffer.alloc(0))];}));
+  await context.exposeFunction('auditMedia',path=>serial(async()=>{calls.push({action:'download_media',p:{path}});if(!(await state.storage(actor,path)).length)throw Error('Private media denied');return [...(files.get(path)||Buffer.alloc(0))];}));
   const provided=['ready','configured','initializationError','auth','academyPortalApi','academyPortalMedia','academyPortalUpload','escapeHtml','academyBackupApi','academyBackupConnection'];
   const session=initialUser?{user:{id:initialUser,email:'fixture@example.test'}}:null;
   const client=`export const ready=Promise.resolve(),configured=true,initializationError=null;let session=${JSON.stringify(session)},listeners=[];
@@ -52,5 +52,5 @@ export async function auditHarness(channel=process.env.PLAYWRIGHT_CHANNEL||'chro
   const page=await context.newPage();page.setDefaultTimeout(4000);page.on('pageerror',e=>errors.push(e.message));
   return {page,context,calls,failNext:(action,when='before',message)=>{failure={action,when,message};},failUpload:n=>{uploadFailure=uploads+n;},delayNext:action=>{let release,started;const wait=new Promise(r=>release=r),pending=new Promise(r=>started=r);delay={action,wait,started};return {pending,release};},setActor:value=>{actor=value;}};
  }
- return {...state,origin,out,browser,errors,pageFor,serial,close:async()=>{await browser.close();await db.close();}};
+ return {...state,origin,out,browser,errors,pageFor,mediaFiles:files,serial,close:async()=>{await browser.close();await db.close();}};
 }

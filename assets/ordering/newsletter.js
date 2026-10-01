@@ -100,7 +100,7 @@ export function mountNewsletterForms(scope = document) {
   });
 }
 
-export async function mountNewsletterPreferences(container, email, {onChange=()=>{}}={}) {
+export async function mountNewsletterPreferences(container, email, {onChange=()=>{},showSavedState=false}={}) {
   if (!container) return;
   container.innerHTML = '<h2>Email preferences</h2><p>Choose whether to receive the TLB newsletter. Your order and payment emails stay on.</p><p class="muted" role="status">Loading your preference…</p>';
   try {
@@ -110,7 +110,7 @@ export async function mountNewsletterPreferences(container, email, {onChange=()=
   } catch (error) {
     if (!container.isConnected) return;
     container.innerHTML = `<h2>Email preferences</h2><p class="newsletter-status" data-error="true" role="status">${escape(error.message)}</p><button type="button" class="newsletter-button newsletter-button-secondary" data-retry-preference>Try again</button>`;
-    container.querySelector('[data-retry-preference]').onclick = () => mountNewsletterPreferences(container, email, {onChange});
+    container.querySelector('[data-retry-preference]').onclick = () => mountNewsletterPreferences(container, email, {onChange,showSavedState});
   }
   function renderPreference(current) {
     rememberPreference(current);
@@ -118,12 +118,20 @@ export async function mountNewsletterPreferences(container, email, {onChange=()=
     container.innerHTML = `<h2>Email preferences</h2><p>Choose whether to receive the TLB newsletter. Your order and payment emails stay on.</p>
       <form data-newsletter-preferences><label class="newsletter-check"><input type="checkbox" name="newsletter" ${optedIn ? 'checked' : ''}><span>Subscribe to TLB’s newsletter<small data-newsletter-offer-signup>Receive TLB news and subscriber-only offers. Unsubscribe anytime.</small></span></label>
       <p class="muted">${current === 'subscribed' ? 'You’re subscribed to the TLB newsletter.' : 'You’re not subscribed to the TLB newsletter.'}</p>
-      <button class="newsletter-button" type="submit">Save email preference</button>
+      ${showSavedState?'<p class="ap-preference-state" role="status">Saved</p>':''}
+      <button class="newsletter-button" type="submit" ${showSavedState?'disabled':''}>Save email preference</button>
       <p class="newsletter-status" role="status" data-newsletter-status hidden></p></form>`;
     applyNewsletterOffer(container);
     const form = container.querySelector('form');
     const message = form.querySelector('[data-newsletter-status]');
     let busy = false;
+    const syncSaved = () => {
+      if (!showSavedState || busy) return;
+      const dirty = form.elements.newsletter.checked !== optedIn;
+      form.querySelector('button[type=submit]').disabled = !dirty;
+      form.querySelector('.ap-preference-state').textContent = dirty ? 'Unsaved changes' : 'Saved';
+    };
+    form.elements.newsletter.addEventListener('change',syncSaved);
     const save = async () => {
       if (busy) return;
       const checked = form.elements.newsletter.checked;
@@ -140,7 +148,7 @@ export async function mountNewsletterPreferences(container, email, {onChange=()=
       } catch (error) {
         status(message, error.message || 'We could not save your preference. Please try again.', true);
         form.querySelectorAll('button,input').forEach(node => node.disabled = false);
-      } finally { busy = false; }
+      } finally { busy = false; syncSaved(); }
     };
     form.onsubmit = event => { event.preventDefault(); save(); };
   }
@@ -265,4 +273,3 @@ mountNewsletterForms();
 renderLanding();
 if (landing) window.addEventListener('hashchange', () => { captureLink(); renderLanding(); });
 setupShopPopup();
-
