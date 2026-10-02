@@ -1,6 +1,8 @@
 import {recentRecipe,rememberRecipe,clearRecentRecipe} from './academy-recent-recipe.js?v=approved-20261002-1';
 import {createPortalMedia} from './academy-media-view.js?v=approved-20261002-1';
 import {mountConversationList,conversationTime} from './academy-conversations.js?v=approved-20261002-1';
+import {watchThreadUpdates} from './academy-thread-updates.js?v=academy-live-1';
+import {materialSection,mountClassMaterials} from './academy-materials.js?v=academy-resources-1';
 import {ready,auth,academyPortalApi as rawApi,academyPortalMedia,academyPortalUpload,escapeHtml as esc} from './client.js?v=approved-20261002-1';
 import {academyErrorMessage} from './academy-errors.js?v=academy-audit-1';
 import {productImageAccept} from './product-image.js?v=approved-20261002-1';
@@ -135,6 +137,8 @@ async function showClass(id){
  const recipeLinks=recipes=>recipes.map(r=>`<a class="ap-recipe-link" href="#recipe/${id}/${r.id}"><span>${esc(r.title)}</span><span>Open recipe →</span></a>`).join('');
  shell(`<p class="ap-breadcrumb"><a href="#classes">← My classes</a></p><header class="ap-class-header"><p class="ap-category">Your Academy class</p><h1>${esc(c.name)}</h1><p>${esc(c.description)}</p><p>Instructor: <strong>${esc(c.instructor||'To be assigned')}</strong></p></header><section class="ap-section ap-learning-materials">${heading('Your class modules','Your recipes and notes, ready when you are.')}<p class="ap-copy">${esc(c.notes)}</p>${c.modules.map((m,i)=>`<article class="ap-module"><p class="ap-category">Module ${i+1}</p><h2>${esc(m.name)}</h2><p>${esc(m.description)}</p><div class="ap-recipes">${recipeLinks(c.recipes.filter(r=>r.module_id===m.id))}</div><p class="ap-small">${esc(m.products.join(' · '))}</p><div class="ap-copy">${esc(m.notes)}</div>${m.tips?`<div class="ap-banner ap-copy">${esc(m.tips)}</div>`:''}<div class="ap-grid">${m.photo_ids.map(photoId=>photo(photoId,m.name)).join('')}</div></article>`).join('')||(!c.recipes.length?empty('Your class materials are being prepared.'):'')}<div class="ap-recipes">${recipeLinks(c.recipes.filter(r=>!r.module_id))}</div></section><section class="ap-class-support" aria-label="Class support"><div><h2>Make it together</h2><p>Get help from ${esc(c.instructor||'your instructor')} or share your latest bake.</p></div><div class="ap-actions">${link(`Ask ${c.instructor||'instructor'}`,`#ask/${id}`,true)}${c.sharing_enabled?link('Share what you made',`#share/${id}`):''}<details><summary>More class support</summary><p>${link(`Contact Instructor — ${c.instructor||'Your instructor'}`,`#contact/${id}`,true)}</p></details></div></section><section class="ap-section">${heading('Your shared creations')}<div class="ap-thread-list">${c.submissions.filter(s=>s.submitted).map(s=>`<div class="ap-thread-row"><button class="ap-button secondary small" data-submission="${s.id}">${esc(s.title)}</button><span class="ap-small">${s.visibility==='instructor'?'Private to instructor':esc(s.moderation==='pending'?'Pending approval':s.moderation)}</span></div>`).join('')||'<p class="ap-muted">Your submitted work and its review status will appear here.</p>'}</div></section>`,'classes');
  enhanceClassDiscovery(root,c,{esc,link});
+ root.querySelector('.ap-class-support').insertAdjacentHTML('beforebegin',materialSection);
+ void mountClassMaterials(root.querySelector('[data-class-materials]'),{api,esc,dialog,formSubmit,registerCleanup},id);
  root.querySelectorAll('[data-submission]').forEach(b=>b.onclick=async()=>{try{const s=await api('submission',{id:b.dataset.submission});const preview=dialog(s.title,'<p>'+esc(s.visibility==='instructor'?'Private to instructor':s.moderation)+'</p><p class="ap-copy">'+esc(s.caption)+'</p><div class="ap-grid two">'+s.media.map(m=>photo(m.id,s.title)).join('')+'</div>');inspectPhotos(preview);}catch(e){notice(academyErrorMessage(e),true);}});
 }
 async function showRecipe(classId,id){
@@ -193,13 +197,30 @@ async function showThread(id,adminNavigation){
  shell(`<p class="ap-breadcrumb"><a href="#${isAdmin?'inbox':'messages'}">← Conversations</a></p>${heading(thread.subject,`${thread.class_name} · ${thread.instructor}`)}<dl class="ap-context-strip ap-thread-context"><div><dt>Student</dt><dd>${esc(thread.account_name)}</dd></div><div><dt>Class</dt><dd>${esc(thread.class_name)}</dd></div>${thread.module_name?'<div><dt>Module</dt><dd>'+esc(thread.module_name)+'</dd></div>':''}${thread.recipe_title?'<div><dt>Recipe</dt><dd><a href="/academy/dashboard#recipe/'+esc(thread.class_id)+'/'+esc(thread.recipe_id)+'">'+esc(thread.recipe_title)+'</a></dd></div>':''}</dl><div class="ap-thread-tools"><p class="ap-small ap-muted" data-thread-state>Private conversation · ${thread.resolved?'Resolved':'Open'}</p>${isAdmin?button(thread.resolved?'Reopen conversation':'Mark resolved','resolve',true):''}${button('Jump to latest','latest',true)}${button('Write a reply','composer',true)}</div><div class="ap-new-reply" hidden role="status"><span>A new reply is ready.</span>${button('Show new reply','new-reply')}</div><div id="ap-thread-messages">${messageMarkup(thread.messages)}</div><section class="ap-reply-composer" aria-labelledby="ap-reply-title"><h2 id="ap-reply-title">Continue the conversation</h2><form class="ap-form" id="ap-thread-form"><label>Your reply<textarea name="body" required maxlength="10000"></textarea></label>${photoTrayMarkup({label:'Optional photos',accept:productImageAccept},esc)}<div class="ap-upload-list"></div><button type="submit" class="ap-button">Send reply</button></form></section>`,isAdmin?'inbox':'messages',{navigation:adminNavigation});
  const form=root.querySelector('#ap-thread-form'),messages=root.querySelector('#ap-thread-messages'),banner=root.querySelector('.ap-new-reply'),tray=mountPhotoTray(form,{preparePhoto,esc});registerCleanup(()=>tray.dispose());inspectPhotos(messages);
  const latest=()=>{const last=messages.lastElementChild;last?.scrollIntoView({block:'center'});last?.focus({preventScroll:true});};
- const state={id,last:thread.messages.at(-1)?.id,onStatus(status){if(status.last_message_id&&status.last_message_id!==this.last)banner.hidden=false;}};activeThread=state;
- root.querySelector('[data-action=latest]').onclick=latest;
+ const state={id,last:thread.messages.at(-1)?.id};activeThread=state;
+ const liveStatus=document.createElement('span');liveStatus.className='ap-small ap-muted';liveStatus.dataset.liveStatus='';liveStatus.textContent='Updates automatically';root.querySelector('.ap-thread-tools').append(liveStatus);
+ const syncResolved=resolved=>{thread.resolved=resolved;root.querySelector('[data-thread-state]').textContent='Private conversation · '+(resolved?'Resolved':'Open');const b=root.querySelector('[data-action=resolve]');if(b)b.textContent=resolved?'Reopen conversation':'Mark resolved';};
+ root.querySelector('[data-action=latest]').onclick=async()=>{banner.hidden=true;latest();try{await markRead();}catch(e){notice(academyErrorMessage(e),true);}};
  root.querySelector('[data-action=composer]').onclick=()=>{form.scrollIntoView({block:'start'});form.elements.body.focus({preventScroll:true});};
  const markRead=async()=>{const last=thread.messages.at(-1);if(last)await api('read_thread',{id,message_id:last.id});};
- async function refreshMessages(scroll){
-  const fresh=await api('thread',{id,mark_read:false});thread=fresh;const rendered=new Set([...messages.children].map(n=>n.dataset.messageId));messages.insertAdjacentHTML('beforeend',messageMarkup(fresh.messages.filter(m=>!rendered.has(m.id))));
-  state.last=fresh.messages.at(-1)?.id;banner.hidden=true;hydrate(messages);inspectPhotos(messages);await markRead();if(scroll)latest();
+ let refreshing=Promise.resolve();
+ function refreshMessages(scroll){
+  // A send and a background update may overlap. Fetch in order and keep the
+  // composer DOM intact; never let an older response replace newer messages.
+  const task=refreshing.catch(()=>{}).then(async()=>{
+   if(activeThread!==state)return;
+   const fresh=await api('thread',{id,mark_read:false});if(activeThread!==state||(!scroll&&document.visibilityState==='hidden'))return;
+   const scrollPosition={x:window.scrollX,y:window.scrollY},focused=document.activeElement,typing=form.contains(focused),lastBox=messages.lastElementChild?.getBoundingClientRect();
+   const follow=!typing&&!document.querySelector('.ap-dialog[open]')&&lastBox&&lastBox.bottom>0&&lastBox.bottom<=innerHeight+80;
+   const focusedBox=focused?.getBoundingClientRect(),typingVisible=typing&&focusedBox.bottom>0&&focusedBox.top<innerHeight;
+   const anchor=typingVisible?focused:window.scrollY>0?[...messages.children].find(n=>{const r=n.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight;}):null,top=anchor?.getBoundingClientRect().top;
+   const rendered=new Set([...messages.children].map(n=>n.dataset.messageId)),added=fresh.messages.filter(m=>!rendered.has(m.id));
+   messages.insertAdjacentHTML('beforeend',messageMarkup(added));thread=fresh;state.last=fresh.messages.at(-1)?.id;syncResolved(fresh.resolved);
+   if(added.length){banner.querySelector('span').textContent='New replies have been added.';banner.hidden=Boolean(scroll||follow);hydrate(messages);inspectPhotos(messages);}
+   if(scroll||follow){banner.hidden=true;await markRead();if(activeThread!==state)return;if(scroll)latest();else messages.lastElementChild?.scrollIntoView({block:'nearest'});}
+   else if(anchor)window.scrollBy(0,anchor.getBoundingClientRect().top-top);
+   else{messages.getBoundingClientRect();window.scrollTo(scrollPosition.x,scrollPosition.y);}
+  });refreshing=task;return task;
  }
  root.querySelector('[data-action=new-reply]').onclick=async event=>{const b=event.currentTarget;b.disabled=true;try{await refreshMessages(true);}catch(e){notice(academyErrorMessage(e),true);}finally{b.disabled=false;}};
  root.querySelector('[data-action=resolve]')?.addEventListener('click',async event=>{try{await api('resolve_thread',{id,resolved:!thread.resolved});thread.resolved=!thread.resolved;event.target.textContent=thread.resolved?'Reopen conversation':'Mark resolved';root.querySelector('[data-thread-state]').textContent='Private conversation · '+(thread.resolved?'Resolved':'Open');}catch(e){notice(academyErrorMessage(e),true);}});
@@ -211,6 +232,11 @@ async function showThread(id,adminNavigation){
   await api('send_message',{id:draft.id});await refreshMessages(true);form.reset();form.elements.body.disabled=false;tray.reset();form.querySelector('.ap-upload-list').innerHTML='';draft=null;finished=0;savedFiles=null;requestKey=crypto.randomUUID();form.querySelector('button[type=submit]').textContent='Send reply';
  });
  await markRead();
+ registerCleanup(watchThreadUpdates({
+  check:async()=>{const status=await api('thread_status',{id});if(activeThread!==state)return;syncResolved(status.resolved);if(status.last_message_id&&status.last_message_id!==state.last)await refreshMessages(false);},
+  onState:text=>{if(activeThread===state)liveStatus.textContent=text;},
+  onError:error=>{if(activeThread!==state||error.code==='ACADEMY_STALE')return;if(error.code==='42501'||error.code==='PGRST301'){cleanupView();route();}}
+ }));
 }
 
 async function preferences(){
@@ -239,7 +265,7 @@ async function route(){
   const actor=data.session?.user;if(user?.id!==actor?.id){clearRecentRecipe(user?.id);galleryMemory=null;}user=actor;if(!user)return gate();
   const overviewViews=['dashboard','classes','announcements','upcoming','preferences'];
   dashboard=await api(!isAdmin&&overviewViews.includes(view)?'dashboard':'navigation');if(current!==generation)return;
-  if(isAdmin){const {mountAcademyAdmin}=await import('./academy-portal-admin.js?v=approved-20261002-1');if(current!==generation)return;return await mountAcademyAdmin({api,root,user,dashboard,shell,notice,heading,empty,field,area,select,check,options,link,button,esc,date,photo,hydrate,dialog,formSubmit,uploadPhotos,productImageAccept,showThread,announcementView,upcomingView,registerCleanup,inspectPhotos});}
+  if(isAdmin){const {mountAcademyAdmin}=await import('./academy-portal-admin.js?v=academy-resources-1');if(current!==generation)return;return await mountAcademyAdmin({api,root,user,dashboard,shell,notice,heading,empty,field,area,select,check,options,link,button,esc,date,photo,hydrate,dialog,formSubmit,uploadPhotos,productImageAccept,showThread,announcementView,upcomingView,registerCleanup,inspectPhotos});}
   if(view==='class')return await showClass(id);if(view==='recipe')return await showRecipe(id,recipeId);if(['share','ask','contact'].includes(view))return await showCompose(id,view,recipeId);if(view==='gallery')return await showGallery(id);if(view==='messages')return await showThreads();if(view==='thread')return await showThread(id);if(view==='preferences')return await preferences();
   if(view==='classes'){shell(`${heading('My classes','Your recipes, notes, and a little guidance along the way.')}${classSearchMarkup(dashboard.classes)}${classCards(dashboard.classes)}`,'classes');bindClassSearch(root);}
   else if(view==='upcoming')shell(`${heading('Coming up in the Academy')}${upcomingCards(dashboard.upcoming)}`,'upcoming');
@@ -260,11 +286,10 @@ auth?.onAuthStateChange((event,session)=>{
 let checkingAccess=false;
 async function checkCurrentAccess(){
  const [view,id]=location.hash.slice(1).split('/');
- if(checkingAccess||!user||document.visibilityState==='hidden'||!['class','recipe','share','ask','contact','thread','gallery'].includes(view)||!id)return;
+ if(checkingAccess||!user||document.visibilityState==='hidden'||!['class','recipe','share','ask','contact','gallery'].includes(view)||!id)return;
  checkingAccess=true;
  try{
-  const status=await api(view==='thread'?'thread_status':view==='gallery'?'gallery_post':'class',{id});
-  if(view==='thread'&&activeThread?.id===id)activeThread.onStatus(status);
+  await api(view==='gallery'?'gallery_post':'class',{id});
  }catch(error){if(error.code!=='ACADEMY_STALE'){cleanupView();await route();}}
  finally{checkingAccess=false;}
 }

@@ -32,7 +32,8 @@
     "test:academy:ux": "node tests/academy-ux.mjs && node --experimental-transform-types tests/ui/academy-ux.mjs",
     "test:academy:audit": "node tests/academy-audit.mjs && node --experimental-transform-types tests/ui/academy-audit.mjs && node --experimental-transform-types tests/ui/academy-admin-audit.mjs && node --experimental-transform-types tests/ui/academy-reaudit.mjs && node --experimental-transform-types tests/ui/academy-reaudit-admin.mjs && node --experimental-transform-types tests/ui/academy-announcement-preview.mjs",
     "test:academy:approved-reaudit": "node tests/academy-approved-reaudit.mjs && node --experimental-transform-types tests/ui/academy-approved-reaudit.mjs",
-    "test:academy:original-photos": "node tests/academy-original-photos.mjs && node --experimental-transform-types --test tests/edge/academy-original-photos.test.mjs && node --experimental-transform-types tests/ui/academy-original-photos.mjs"
+    "test:academy:original-photos": "node tests/academy-original-photos.mjs && node --experimental-transform-types --test tests/edge/academy-original-photos.test.mjs && node --experimental-transform-types tests/ui/academy-original-photos.mjs",
+    "test:academy:resources": "node tests/academy-resources.mjs && node --experimental-transform-types --test tests/academy-email-preview.test.mjs && node --experimental-transform-types tests/ui/academy-live-resources.mjs"
   },
   "devDependencies": {
     "jszip": "3.10.1",

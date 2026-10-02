@@ -18,12 +18,14 @@ export async function auditHarness(channel=process.env.PLAYWRIGHT_CHANNEL||'chro
   const calls=[];const context=await browser.newContext({viewport:{width,height},reducedMotion:'reduce',...device});
   await context.exposeFunction('auditActor',value=>{actor=value;});
   await context.exposeFunction('auditRpc',async(action,p)=>{
+   try{
    calls.push({action,p});const fail=failure?.action===action?failure:null;if(fail)failure=null;
    if(fail?.when==='before')throw Error(fail.message||'Connection interrupted. Please retry.');
    const result=await serial(()=>api(actor,action,p));
    if(fail?.when==='after')throw Error(fail.message||'Connection interrupted. Please retry.');
    if(delay?.action===action){const pending=delay;delay=null;pending.started();await pending.wait;}
-   return result;
+   return {data:result};
+   }catch(error){return {error:{message:error.message,code:error.code}};}
   });
   await context.exposeFunction('auditUpload',async({id,bytes})=>serial(async()=>{
    uploads++;if(uploadFailure&&uploads===uploadFailure)throw Error('Simulated connection loss');
@@ -34,11 +36,11 @@ export async function auditHarness(channel=process.env.PLAYWRIGHT_CHANNEL||'chro
   }));
   await context.exposeFunction('auditMedia',path=>serial(async()=>{calls.push({action:'download_media',p:{path}});if(!(await state.storage(actor,path)).length)throw Error('Private media denied');return [...(files.get(path)||Buffer.alloc(0))];}));
   const provided=['ready','configured','initializationError','auth','academyPortalApi','academyPortalMedia','academyPortalUpload','escapeHtml','academyBackupApi','academyBackupConnection'];
-  const session=initialUser?{user:{id:initialUser,email:'fixture@example.test'}}:null;
+  const session=initialUser?{access_token:'fixture-user',user:{id:initialUser,email:'fixture@example.test'}}:null;
   const client=`export const ready=Promise.resolve(),configured=true,initializationError=null;let session=${JSON.stringify(session)},listeners=[];
-   window.auditChangeSession=async(id)=>{await window.auditActor(id);session=id?{user:{id,email:'fixture@example.test'}}:null;listeners.forEach(fn=>fn(id?'SIGNED_IN':'SIGNED_OUT',session));};
+   window.auditChangeSession=async(id)=>{await window.auditActor(id);session=id?{access_token:'fixture-user',user:{id,email:'fixture@example.test'}}:null;listeners.forEach(fn=>fn(id?'SIGNED_IN':'SIGNED_OUT',session));};
    export const auth={getSession:async()=>({data:{session}}),onAuthStateChange:fn=>{listeners.push(fn);return {data:{subscription:{unsubscribe(){}}}};},signOut:async()=>window.auditChangeSession(null)};
-   export const academyPortalApi=(action,p={})=>window.auditRpc(action,p),academyPortalMedia=async path=>new Blob([Uint8Array.from(await window.auditMedia(path))],{type:({'png':'image/png','jpg':'image/jpeg','heic':'image/heic'})[path.split('.').at(-1)]||'image/webp'}),academyPortalUpload=async(id,file,progress)=>{progress(50);const r=await window.auditUpload({id,bytes:[...new Uint8Array(await file.arrayBuffer())]});progress(100);return r;};
+   export const academyPortalApi=async(action,p={})=>{const r=await window.auditRpc(action,p);if(r.error)throw Object.assign(new Error(r.error.message),{code:r.error.code});return r.data;},academyPortalMedia=async path=>new Blob([Uint8Array.from(await window.auditMedia(path))],{type:({'png':'image/png','jpg':'image/jpeg','heic':'image/heic'})[path.split('.').at(-1)]||'image/webp'}),academyPortalUpload=async(id,file,progress)=>{progress(50);const r=await window.auditUpload({id,bytes:[...new Uint8Array(await file.arrayBuffer())]});progress(100);return r;};
    export const escapeHtml=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
    export const academyBackupApi=async()=>({enabled:false,jobs:[],schedule:'Daily at 02:00 Asia/Manila'}),academyBackupConnection=async()=>({});
    ${names.filter(n=>!provided.includes(n)).map(n=>`export const ${n}=async()=>({});`).join('\n')}`;

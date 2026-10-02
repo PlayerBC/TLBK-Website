@@ -1,10 +1,2 @@
-const escape=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function renderAcademyEmail(p:any){
- const url=String(p.url||'');if(!url.startsWith('https://thelittlebakerkitchen.com/'))throw Error('Invalid Academy email destination.');
- const token=p.marketing&&/^[a-f0-9]{64}$/.test(p.unsubscribe_token)?p.unsubscribe_token:null;
- if(p.marketing&&!token)throw Error('Marketing email requires an unsubscribe link.');
- const unsub=token?`https://thelittlebakerkitchen.com/academy/unsubscribe?token=${token}`:'';
- const text=`TLB Academy by TLB Kitchen\n\n${p.title}\n${p.account_name||''}\n${p.class_name||''}\n\n${p.preview||''}\n${p.attachments?'Photos are attached in the private Academy conversation.':''}\n\nOpen Academy: ${url}\n${token?`\n${p.address}\nUnsubscribe from Academy marketing: ${unsub}`:''}`;
- const html=`<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width"><title>${escape(p.title)}</title></head><body style="margin:0;background:#fefaef;color:#2f2624;font:16px/1.6 Arial,sans-serif"><table role="presentation" style="width:100%;max-width:600px;margin:32px auto;background:#fffdf8;border:1px solid #e8dfd3;border-radius:18px"><tr><td style="padding:32px"><p style="font-size:12px;letter-spacing:2px;color:#764b25">TLB ACADEMY</p><h1 style="font-size:28px">${escape(p.title)}</h1><p>${escape(p.account_name)}${p.class_name?' · '+escape(p.class_name):''}</p><p style="white-space:pre-wrap">${escape(p.preview)}</p>${p.attachments?'<p>Photos are included in your secure Academy inbox.</p>':''}<p><a href="${escape(url)}" style="display:inline-block;background:#764b25;color:white;text-decoration:none;border-radius:10px;padding:12px 22px">Open Academy →</a></p><hr style="border:0;border-top:1px solid #e8dfd3"><p style="font-size:12px">TLB Academy by TLB Kitchen</p>${token?`<p style="font-size:12px">${escape(p.address)}</p><p><a href="${escape(unsub)}">Unsubscribe from Academy marketing</a></p>`:'<p style="font-size:12px">This is an Academy account or class notification.</p>'}</td></tr></table></body></html>`;
- return {html,text,...(token?{headers:{'List-Unsubscribe':`<https://aulhqofjjckwwjmdvqgi.supabase.co/functions/v1/academy-unsubscribe?token=${token}>`,'List-Unsubscribe-Post':'List-Unsubscribe=One-Click'}}:{})};
-}
+// Shared by the sending worker and the Academy preview.
+export {renderAcademyEmail} from '../../../assets/ordering/academy-email-render.js';
