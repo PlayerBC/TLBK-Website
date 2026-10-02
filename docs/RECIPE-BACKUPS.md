@@ -2,6 +2,24 @@
 
 ## Current release status
 
+On 3 October 2026 the owner approved **Final recipes only**: drafts, R&D and
+unrelated previous recipe versions must not enter new backups. The Final-only
+change is verified locally and awaits the coordinated audit release. It requires
+`20261002171359_recipe_final_only_backups.sql`, the updated `recipe-backup` worker
+and the updated archive checker/UI. New archives use schema 5. Older schema 1–4
+archives remain readable and retain their original coverage.
+
+The published `production_version_id` selects the Final, even if the current
+working version is a newer draft. Recovery records use that Final's name,
+category, document and exact saved cost snapshot. Current catalog prices are
+included separately. A pinned Final component is included when a Final recipe
+needs that exact formula; unrelated earlier versions are excluded. Comparison-only
+variation bases outside this scope are omitted, along with the archived document's
+optional `base` metadata. Ingredients, methods, yield and saved costing are unchanged.
+
+The deployment evidence below describes earlier archive formats and does not
+prove that the new Final-only scope is live.
+
 The owner approved deployment on 30 September 2026. The recipe/access migrations
 and `recipe-backup` Edge Function v2 are deployed, and automatic backups are enabled.
 A real daily archive completed at 05:43 UTC; the unattended scheduler made a
@@ -43,41 +61,43 @@ Daily / Monthly / Manual/
 
 The authoritative JSON retains original IDs and relationships for:
 
-- Recipe settings, categories, tags, recipes and all immutable saved versions.
-- Ingredient, supplier, packaging and equipment resources, supplier-item links
-  and historical purchase prices.
+- Recipe settings, categories, published Final recipes and the exact pinned Final
+  component versions needed by them.
+- Ingredient, supplier and packaging resources, supplier-item links and each
+  supplier's latest purchase quote.
 - Yield, quantities, methods, baking stages, notes, allergens and variations.
 - Recipe/packaging/component cost snapshots and optional labor/other costs.
-- Pinned component links, ingredient references, R&D logs and proposed formulas.
-- Completed production records, draft recovery records, audit history, recipe
-  access grants and personal recipe library state.
+- Pinned component links and ingredient references.
 - Uploaded-file metadata, visibility links and the actual bytes of every file
-  marked uploaded, including retained source documents and unused uploaded files.
+  used by included Final recipes, their pinned components or catalog items.
 - Actor IDs and email addresses needed to reconcile attribution during recovery.
 
 The database snapshot is captured by a single INSERT/SELECT statement and then
 paged from staging. A concurrent edit cannot make different tables come from
 different snapshots. File paths cannot be overwritten; each upload gets a new ID.
 
-Readable HTML is included for approved/production versions. It is secondary to
+Readable HTML is included for Final recipes and their required pinned components. It is secondary to
 the complete JSON records. SHA-256 checksums identify each archive entry and map
 each file back to its database ID and private Storage path.
 
 Excluded: passwords, Auth sessions, service/API keys, worker tokens, unrelated shop
-orders/customer data, unfinished uploads, and external files that were never
-uploaded into the recipe system. Existing order backups remain a separate system.
+orders/customer data, drafts/R&D, unrelated earlier recipe versions, equipment
+catalog records, R&D/production/activity logs, draft recovery records, staff access
+and schedules, personal library state, unfinished/unused uploads and external
+files that were never uploaded into the recipe system. Existing order backups
+remain a separate system. Older verified archives retain their previous content.
 
 ## Schedule and retention
 
 - Scheduled checks run every five minutes using `pg_cron` and a dedicated Vault
   token. Daily snapshots become due at **02:00 Asia/Manila**.
-- Keep **30 daily**, **12 monthly** and **2 manual** full copies. A monthly copy
+- Keep **30 daily**, **12 monthly** and **2 manual** independent copies. A monthly copy
   comes from a verified daily archive and must match its checksum and byte count.
 - **Back up now** requests a manual copy. The user can close the browser after
   the job starts. Status is polled while the page remains open.
 - Rotate the oldest slot of the appropriate kind. A failed write invalidates only
   its target slot; other verified recovery points remain available.
-- Every full copy includes its own files. Approximate fully populated storage is
+- Every copy includes its own linked files. Approximate fully populated storage is
   44 times the current archive size, subject to historical photo/version growth.
 - A live deletion does not remove existing historical snapshots. Records remain
   available until normal retention rotates the copies containing them.
@@ -86,7 +106,10 @@ Jobs use an exclusive ten-minute lease. Failed manual jobs retain their retry
 request. A later scheduled check marks an expired job interrupted before retrying.
 Drive requests retry partial acknowledgments and interrupted resumable uploads.
 Status reports last attempt, last verified success, due time, errors, counts and
-recovery points. Three consecutive failures receive a prominent warning. There is
+recovery points. Coverage is labeled **Final recipes**, **Latest working copy** or
+**Full history** per archive. Monthly copies inherit their verified daily source's
+coverage. In-flight pre-migration jobs remain labeled latest working copies. Three
+consecutive failures receive a prominent warning. There is
 no separate email/SMS alert in this release.
 
 Success requires Google's returned file ID, byte count and SHA-256 to match the
@@ -107,13 +130,13 @@ the expected Google API origin/path. All supplied archive paths are validated.
 
 ## Deployment checklist — requires explicit production approval
 
-1. Review the two migrations below and this release's test report. Take the normal
+1. Review the Final-only migration and this release's test report. Take the normal
    Supabase database backup before applying schema changes.
-2. Apply, in order:
-   `20260929222223_recipe_platform.sql` and
-   `20260929230949_recipe_backups.sql`.
-   The first creates the private recipe model, RPCs, RLS and Storage bucket. The
-   second adds backup staging/status, a separate worker token and scheduled job.
+2. On the existing deployed recipe system, apply
+   `20261002171359_recipe_final_only_backups.sql` after the essential-backup
+   migrations. A fresh recovery environment needs the full matching migration
+   sequence. This change preserves worker authorization, RLS, leases, verified
+   Drive completion, scheduling and existing recovery points.
 3. Deploy `supabase/functions/recipe-backup/index.ts` with its shared modules and
    local archive/hash dependencies. Gateway JWT verification must be disabled for
    the dedicated cron token; the handler enforces owner JWT or worker-token auth.
@@ -164,8 +187,8 @@ node scripts/benchmark-recipe-backup.mjs 100
 
 ## Restore rehearsal
 
-Use a trusted checkout containing the same schema/backup format. The current
-manifest is format version 1, schema version 2; schema 1 archives are also accepted.
+Use a trusted checkout containing the same schema/backup format. The new Final-only
+manifest is format version 1, schema version 5; schemas 1–4 are also accepted.
 Install PGlite in an isolated test
 environment; `PGLITE_PACKAGE_ROOT` can point to its node_modules directory.
 
@@ -206,7 +229,8 @@ are **not** a production Auth restore script.
    `storage.objects` row: real file bytes must be uploaded. Recheck byte sizes and
    hashes. Reconcile file ownership against the restored account mapping.
 5. Compare full data, pinned component versions, yields, historical prices,
-   packaging, R&D, production records and photo access. Test kitchen isolation,
+   packaging and photo access; compare logs/history only if the chosen older
+   archive includes them. Test kitchen isolation,
    saving a new version, import, printing and a fresh independent backup.
 6. Only after owner review switch application credentials/traffic. Reconfigure the
    external backup connection and runtime secrets separately; they are not in ZIPs.

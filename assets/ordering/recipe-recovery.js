@@ -1,4 +1,4 @@
-import {safeArchivePath,validateRecipeManifest,newDigest,finishDigest} from './recipe-archive.js?v=essentials-20261002-1';
+import {safeArchivePath,validateRecipeManifest,newDigest,finishDigest} from './recipe-archive.js?v=final-backups-20261003-1';
 const decoder=new TextDecoder('utf-8',{fatal:true});
 async function view(blob,offset,length){if(offset<0||offset+length>blob.size)throw Error('Archive is truncated.');return new DataView(await blob.slice(offset,offset+length).arrayBuffer());}
 async function zipDirectory(blob){
@@ -42,6 +42,13 @@ export function validateRecipeRelationships(tables,manifest){
  for(const r of tables.recipe_categories)ref('recipe_categories',r.parent_id,true);
  for(const r of tables.recipes){ref('recipe_categories',r.category_id,true);for(const id of [r.current_version_id,r.production_version_id])if(id&&ref('recipe_versions',id).recipe_id!==r.id)throw Error('Recipe points to another recipe’s version.');}
  for(const r of tables.recipe_versions)ref('recipes',r.recipe_id);
+ if(manifest.schema_version===5){
+  for(const r of tables.recipe_versions)if(!['approved','production'].includes(r.status))throw Error('A Final recipe archive contains a draft or R&D version.');
+  for(const r of tables.recipes){
+   if(r.production_version_id&&r.current_version_id!==r.production_version_id)throw Error('A Final recipe archive points to a working version.');
+   if(!r.production_version_id&&!tables.recipe_links.some(link=>link.kind==='component'&&ref('recipe_versions',link.target_version_id).recipe_id===r.id))throw Error('An unpublished recipe is not a required Final component.');
+  }
+ }
  for(const r of tables.recipe_links){ref('recipe_versions',r.version_id);ref('recipe_versions',r.target_version_id);}
  for(const r of tables.recipe_ingredient_links){ref('recipe_versions',r.version_id);if(ref('recipe_resources',r.resource_id).kind!=='ingredient')throw Error('Ingredient link has the wrong resource type.');}
  for(const r of tables.recipe_prices){ref('recipe_resources',r.resource_id);if(r.supplier_id&&ref('recipe_resources',r.supplier_id).kind!=='supplier')throw Error('Price supplier has the wrong resource type.');}

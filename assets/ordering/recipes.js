@@ -51,10 +51,12 @@ async function api(action,payload={}){
 }
 function librarySignature(){return JSON.stringify([state.userId,state.role,state.can_view_rd,state.kitchen,state.rd,state.filters,state.offset]);}
 function rememberLibrary(){
+ // Search debounces belong to their list view, never the opened recipe or editor.
+ clearTimeout(state.searchTimer);clearTimeout(state.costSearchTimer);
  if(state.role==='kitchen')return;
  persistResourceView();
  if(!root.querySelector('.recipe-library')||!state.libraryStamp)return;
- clearTimeout(state.searchTimer);const query=root.querySelector('[data-filter="query"]')?.value||'';
+ const query=root.querySelector('[data-filter="query"]')?.value||'';
  if(query!==(state.filters.query||'')){state.filters.query=query;state.offset=0;invalidateLibrary();return;}
  state.libraryView={nodes:[...root.childNodes],scroll:window.scrollY,focus:document.activeElement,signature:librarySignature()};
 }
@@ -180,7 +182,7 @@ async function showWorkingDraft(request){
 function beginEdit(record=null,document=null,testWorkspace=null){
  if(record?.rd_restricted)throw Error('R&D access is required to edit this recipe.');
  if(testWorkspace&&!canRD())throw Error('R&D access is required to use test logs.');
- rememberLibrary();
+ rememberLibrary();state.request++;
  ingredientPicker.clear();
  state.testWorkspace=testWorkspace;
  state.record=record;state.doc=model.normalizeRecipe(document||record?.document||model.blankRecipe());
@@ -201,7 +203,7 @@ async function costingOverview({scroll=null}={}){
  const previousScroll=scroll??(root.querySelector('.recipe-cost-overview')?window.scrollY:state.listViews.costing?.scroll||0);
  state.tab='costing';state.record=null;state.editing=false;const ticket=++state.request;state.costFilters??={};
  if(!root.querySelector('.recipe-cost-overview'))shell(recipeLoadingMarkup({rows:true}));else root.setAttribute('aria-busy','true');
- try{const data=await api('costing_overview',{...state.costFilters,mode:state.costFilters.mode||'all',source:'current',limit:24});if(ticket!==state.request||state.tab!=='costing')return;if(state.costFilters.offset>0&&state.costFilters.offset>=data.total){state.costFilters.offset=Math.max(0,Math.floor((data.total-1)/24)*24);return costingOverview({scroll:previousScroll});}state.costOverviewData=data;state.global_allowance=data.global_allowance;shell(allowanceMarkup(data.global_allowance,isOwner())+costingOverviewMarkup(data,state.costFilters,state.categories,{button,canViewRD:canRD()}),{retainFilters:true});bindSharedAllowance();arrangeCosting(root);if(ticket===state.request)window.scrollTo(0,previousScroll);persistResourceView();}
+ try{const data=await api('costing_overview',{...state.costFilters,mode:state.costFilters.mode||'all',source:'current',limit:24});if(ticket!==state.request||state.tab!=='costing'||state.editing||state.record)return;if(state.costFilters.offset>0&&state.costFilters.offset>=data.total){state.costFilters.offset=Math.max(0,Math.floor((data.total-1)/24)*24);return costingOverview({scroll:previousScroll});}state.costOverviewData=data;state.global_allowance=data.global_allowance;shell(allowanceMarkup(data.global_allowance,isOwner())+costingOverviewMarkup(data,state.costFilters,state.categories,{button,canViewRD:canRD()}),{retainFilters:true});bindSharedAllowance();arrangeCosting(root);if(ticket===state.request)window.scrollTo(0,previousScroll);persistResourceView();}
  catch(error){if(ticket===state.request&&state.tab==='costing')sectionLoadError(error);}
 }
 function bindSharedAllowance(){
@@ -520,7 +522,7 @@ async function action(name,a={}){
  if(name==='remove-resource-photo'){state.resourcePhotos.splice(Number(a.index),1);await renderResourcePhotos();return;}
  if(name==='record-purchase'){if(state.editing&&!await leaveEditor())return;const {openPurchase}=await import('./recipe-purchase.js?v=refinement-20261002-1');return openPurchase({userId:state.userId,api,dialog:setDialog,body:dialogBody,close:closeDialog,kind:state.tab==='packaging'?'packaging':'ingredient',onSaved:async kind=>{await resources(kind);notify('Purchase saved. Ingredient or packaging and supplier records are up to date.');}});}
  if(name==='record-item-price'){const record=state.resources.find(r=>r.id===a.id);if(!record)return;const {openItemPrice}=await import('./recipe-purchase.js?v=refinement-20261002-1');return openItemPrice({api,dialog:setDialog,body:dialogBody,close:closeDialog,record,onSaved:async()=>{ingredientPicker.clear();await resources(record.kind,{refresh:true});notify('Price recorded. Saved recipe costs are unchanged.');}});}
- if(name==='tab'){if(!await leaveEditor())return;persistResourceView(a.tab);const restoreScroll=tableKinds.includes(a.tab)?restoreResourceView(a.tab):null;state.staffAccessController?.dispose();state.staffAccessController=null;if(!tableKinds.includes(a.tab)){state.resourceQuery='';state.resourceDeleted=false;state.resourceOffset=0;}state.resourceRequest++;if(a.tab==='manage')return manage();if(a.tab==='units')return manageUnits();if(a.tab==='costing')return costingOverview();if(a.tab==='library')return library();if(a.tab==='categories')return categories({scroll:restoreScroll});if(a.tab==='access')return access();if(a.tab==='staff-access')return staffAccess();if(a.tab==='backups'){state.tab='backups';shell('<div id="recipe-backups"></div>');const m=await import('./recipe-backups.js?v=essentials-20261002-1');return m.mountRecipeBackups(root.querySelector('#recipe-backups'));}return resources(a.tab,{scroll:restoreScroll});}
+ if(name==='tab'){if(!await leaveEditor())return;persistResourceView(a.tab);const restoreScroll=tableKinds.includes(a.tab)?restoreResourceView(a.tab):null;state.staffAccessController?.dispose();state.staffAccessController=null;if(!tableKinds.includes(a.tab)){state.resourceQuery='';state.resourceDeleted=false;state.resourceOffset=0;}state.resourceRequest++;if(a.tab==='manage')return manage();if(a.tab==='units')return manageUnits();if(a.tab==='costing')return costingOverview();if(a.tab==='library')return library();if(a.tab==='categories')return categories({scroll:restoreScroll});if(a.tab==='access')return access();if(a.tab==='staff-access')return staffAccess();if(a.tab==='backups'){state.tab='backups';shell('<div id="recipe-backups"></div>');const m=await import('./recipe-backups.js?v=final-backups-20261003-1');return m.mountRecipeBackups(root.querySelector('#recipe-backups'));}return resources(a.tab,{scroll:restoreScroll});}
  if(name==='library'){if(await leaveEditor())return library({reuse:true});return;}
  if(name==='new'){if(await leaveEditor()){beginEdit();}return;}
  if(name==='open')return openRecipe(a.id);
@@ -638,11 +640,11 @@ root.addEventListener('submit',event=>{if(event.target.id==='recipe-editor'){eve
 root.addEventListener('input',event=>{
  const el=event.target;
  if(el.hasAttribute('data-test-field')){state.testWorkspace.data[el.dataset.testField]=el.value;markDirty();}
- else if(el.hasAttribute('data-cost-filter')&&el.tagName==='INPUT'){clearTimeout(state.costSearchTimer);state.costFilters[el.dataset.costFilter]=el.value;state.costFilters.offset=0;state.request++;state.costSearchTimer=setTimeout(()=>{if(state.tab==='costing')costingOverview().catch(showError);},350);}
+ else if(el.hasAttribute('data-cost-filter')&&el.tagName==='INPUT'){clearTimeout(state.costSearchTimer);state.costFilters[el.dataset.costFilter]=el.value;state.costFilters.offset=0;state.request++;state.costSearchTimer=setTimeout(()=>{if(el.isConnected&&state.tab==='costing'&&!state.editing&&!state.record)costingOverview().catch(showError);},350);}
  else if(el.dataset.photoCaption){for(const photo of [...state.doc.photos,...state.doc.variants.flatMap(v=>[...v.photos,...v.packaging.photos])])if(photo.id===el.dataset.photoCaption)photo.caption=el.value;markDirty();}
  else if(el.dataset.path){setPath(state.doc,el.dataset.path,el.dataset.array?el.value.split(',').map(s=>s.trim()).filter(Boolean):el.value);syncSectionName(el);markDirty();
 
- }else if(el.matches('[data-filter="query"]')){clearTimeout(state.searchTimer);state.filters.query=el.value;state.offset=0;state.request++;persistResourceView();state.searchTimer=setTimeout(()=>{if(state.tab==='library')library().catch(showError);},400);}
+ }else if(el.matches('[data-filter="query"]')){clearTimeout(state.searchTimer);state.filters.query=el.value;state.offset=0;state.request++;persistResourceView();state.searchTimer=setTimeout(()=>{if(el.isConnected&&state.tab==='library'&&!state.editing&&!state.record)library().catch(showError);},400);}
  else if(el.hasAttribute('data-resource-search')){const kind=state.tab;clearTimeout(state.searchTimer);state.resourceQuery=el.value;state.resourceOffset=0;state.resourceRequest++;persistResourceView();state.searchTimer=setTimeout(()=>{if(state.tab===kind)(kind==='categories'?categories({refresh:true}):resources(kind,{refresh:true})).catch(showError);},300);}
 });
 root.addEventListener('change',async event=>{const el=event.target;try{
